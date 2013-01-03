@@ -1,0 +1,7 @@
+LXWeather - A lightweight GTK+ weather application.
+
+The application uses Yahoo! Weather(r) to retrieve weather forecast and
+conditions for specified location(s).
+
+The application also provides a plugin for the LXDE panel (LXPanel).
+
