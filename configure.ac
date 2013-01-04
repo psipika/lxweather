@@ -35,6 +35,9 @@ PKG_PROG_PKG_CONFIG
 
 CPPFLAGS="$CPPFLAGS -W -Wall"
 
+RELDATE=`date +'%a %b %e %Y'`
+AC_SUBST(RELDATE)
+
 # Check for packages we depend on
 PKG_CHECK_MODULES([GLIB2], [glib-2.0])
 AC_SUBST(GLIB2_CFLAGS)
@@ -82,6 +85,7 @@ CFLAGS="-O2"
 fi
 
 AC_OUTPUT(
+ lxweather.spec
  Makefile
  src/Makefile
  src/lxpanel_plugin/Makefile

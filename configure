@@ -652,6 +652,7 @@ GIO2_LIBS
 GIO2_CFLAGS
 GLIB2_LIBS
 GLIB2_CFLAGS
+RELDATE
 PKG_CONFIG_LIBDIR
 PKG_CONFIG_PATH
 PKG_CONFIG
@@ -11448,6 +11449,9 @@ fi
 
 CPPFLAGS="$CPPFLAGS -W -Wall"
 
+RELDATE=`date +'%a %b %e %Y'`
+
+
 # Check for packages we depend on
 
 pkg_failed=no
@@ -11944,7 +11948,7 @@ else
 CFLAGS="-O2"
 fi
 
-ac_config_files="$ac_config_files Makefile src/Makefile src/lxpanel_plugin/Makefile doc/Makefile"
+ac_config_files="$ac_config_files lxweather.spec Makefile src/Makefile src/lxpanel_plugin/Makefile doc/Makefile"
 
 cat >confcache <<\_ACEOF
 # This file is a shell script that caches the results of configure
@@ -12978,6 +12982,7 @@ do
   case $ac_config_target in
     "depfiles") CONFIG_COMMANDS="$CONFIG_COMMANDS depfiles" ;;
     "libtool") CONFIG_COMMANDS="$CONFIG_COMMANDS libtool" ;;
+    "lxweather.spec") CONFIG_FILES="$CONFIG_FILES lxweather.spec" ;;
     "Makefile") CONFIG_FILES="$CONFIG_FILES Makefile" ;;
     "src/Makefile") CONFIG_FILES="$CONFIG_FILES src/Makefile" ;;
     "src/lxpanel_plugin/Makefile") CONFIG_FILES="$CONFIG_FILES src/lxpanel_plugin/Makefile" ;;

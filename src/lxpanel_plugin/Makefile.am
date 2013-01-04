@@ -1,8 +1,5 @@
 lib_LTLIBRARIES= libweather.la
 
-INCLUDES=  \
- -I$(top_srcdir)/src
-
 libweather_la_SOURCES=         \
  $(top_srcdir)/src/logutil.c   \
  $(top_srcdir)/src/yahooutil.c \
@@ -13,8 +10,14 @@ libweather_la_SOURCES=         \
  $(top_srcdir)/src/weatherwidget.c \
  weather.c
 
+INCLUDES=  \
+ -I$(top_srcdir)/src
+
 libweather_la_CPPFLAGS=     \
  $(DEPENDENCIES_CFLAGS)
 
 libweather_la_LDFLAGS=      \
  $(DEPENDENCIES_LIBS)
+
+install-exec-hook:
+	find . -regex ".*.\(l\)?a"

@@ -1,0 +1,79 @@
+Summary: LXWeather - A lightweight GTK+ weather application.
+Name: lxweather
+Version: @VERSION@
+Release: 1%{?dist}
+License: GPL2+
+Group: Applications/System
+URL: https://github.com/psipika/lxweather
+Source0: %{name}-%{version}.tar.gz
+BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
+BuildRequires: libxml2-devel
+Requires: libxml2
+Prefix: /usr
+
+%description
+LXWeather is a lightweight GTK+-2.0 application which provides weather
+conditions and forecast information for a specified location or locations.
+
+%package lxpanel-plugin
+Summary: Weather plugin for lxpanel.
+Group: Applications/System
+
+%description lxpanel-plugin
+Weather plugin for LXDE's lxpanel.
+
+%prep
+%setup -q
+
+%build
+%configure
+make
+
+%install
+make DESTDIR=${RPM_BUILD_ROOT} install
+find ${RPM_BUILD_ROOT} -regex '.*.\(l\)?a' -delete
+
+%clean
+rm -fr $RPM_BUILD_ROOT
+
+%post
+
+%postun
+
+%post lxpanel-plugin
+if [ -e %{_libdir}/lxpanel/plugins/weather.so ]; then
+  mv -f %{_libdir}/lxpanel/plugins/weather.so %{_libdir}/lxpanel/plugins/weather.so.rpmsave
+fi
+
+ln -sf %{_libdir}/libweather.so %{_libdir}/lxpanel/plugins/weather.so
+
+/sbin/ldconfig
+
+%postun lxpanel-plugin
+rm -f %{_libdir}/lxpanel/plugins/weather.so
+
+if [ -e %{_libdir}/lxpanel/plugins/weather.so.rpmsave ]; then
+  mv -f %{_libdir}/lxpanel/plugins/weather.so.rpmsave %{_libdir}/lxpanel/plugins/weather.so
+fi
+
+/sbin/ldconfig
+
+%files
+%defattr(-,root,root,-)
+%{_bindir}/lxweather
+
+%doc AUTHORS
+%doc COPYING
+%doc COPYRIGHT
+%doc ChangeLog
+%doc NEWS
+%doc README
+#%doc %{_mandir}/man1/lxweather.1.gz
+
+%files lxpanel-plugin
+%defattr(-,root,root,-)
+%{_libdir}/libweather.so*
+
+%changelog
+* @RELDATE@ Piotr Sipika <Piotr.Sipika at gmail dot com>
+- Release @VERSION@

@@ -165,6 +165,7 @@ PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 RANLIB = @RANLIB@
+RELDATE = @RELDATE@
 SED = @SED@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
@@ -237,6 +238,15 @@ lxweather_CPPFLAGS = \
 
 lxweather_LDADD = \
  $(DEPENDENCIES_LIBS)
+
+EXTRA_DIST = \
+ logutil.h           \
+ yahooutil.h         \
+ httputil.h          \
+ fileutil.h          \
+ location.h          \
+ forecast.h          \
+ weatherwidget.h
 
 all: all-am
 

@@ -15,3 +15,12 @@ lxweather_CPPFLAGS=     \
 
 lxweather_LDADD=      \
  $(DEPENDENCIES_LIBS)
+
+EXTRA_DIST =         \
+ logutil.h           \
+ yahooutil.h         \
+ httputil.h          \
+ fileutil.h          \
+ location.h          \
+ forecast.h          \
+ weatherwidget.h
