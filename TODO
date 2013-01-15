@@ -1,7 +1,6 @@
 In no particular order:
 [] Provide gtk3 support
 [] Populate doc directory with proper documentation
-[] Create the spec file for rpmbuild
 [] Create deb building structure and add functionality
 [] Create application desktop entry
 [] Cleanup copyLocation calls - simply allocate a location at the beginning
