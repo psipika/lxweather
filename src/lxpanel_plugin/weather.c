@@ -143,6 +143,8 @@ weather_constructor(Plugin * pPlugin, char ** pFP)
             {
               LXW_LOG(LXW_ERROR, "Weather: illegal config line: %s", l.str);
 
+              freeLocation(pLocation);
+
               return 0;
             }
 

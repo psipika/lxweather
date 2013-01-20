@@ -33,13 +33,13 @@ else
 cleanrpm:
 endif
 
-# DEB-specific definitions
+# DEB-specific definitions TODO: actually make debs, when asked
 if HAVE_DEB
 cleandeb:
-	dh_clean
+#	dh_clean
 
-deb: debian/changelog
-	dpkg-buildpackage -b -us -uc
+deb: #debian/changelog
+#	dpkg-buildpackage -b -us -uc
 
 else
 cleandeb:
