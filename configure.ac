@@ -1,5 +1,5 @@
 AC_COPYRIGHT([
-Copyright (c) 2012-2013 Piotr Sipika; see the AUTHORS file for more information.
+Copyright (c) 2012-2014 Piotr Sipika; see the AUTHORS file for more information.
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -19,19 +19,26 @@ See the COPYRIGHT file for more information.
 ])
 
 # Initialize Autoconf and Automake
-AC_INIT([lxweather], 0.0.1, [Piotr.Sipika AT gmail DOT com])
+AC_INIT([lxweather], 0.0.2, [Piotr.Sipika AT gmail DOT com])
 AC_CONFIG_SRCDIR([src/main.c])
-AM_INIT_AUTOMAKE([1.9.6])
+AM_INIT_AUTOMAKE([1.9.6 -Wall])
 AC_CONFIG_MACRO_DIR([m4])
 
 # Check for programs we'll be using
 AC_PROG_CC
 AC_PROG_INSTALL
-AC_PROG_LIBTOOL
+AC_PROG_INTLTOOL
+#AC_PROG_LIBTOOL
 AC_LANG([C])
 AM_PROG_CC_C_O
 
-PKG_PROG_PKG_CONFIG
+m4_ifdef([AM_PROG_AR], [AM_PROG_AR])
+
+# Initialize libtool
+LT_PREREQ([2.2])
+LT_INIT
+
+#PKG_PROG_PKG_CONFIG
 
 CPPFLAGS="$CPPFLAGS -W -Wall"
 
@@ -90,4 +97,5 @@ AC_OUTPUT(
  src/Makefile
  src/lxpanel_plugin/Makefile
  doc/Makefile
+ po/Makefile.in
 )

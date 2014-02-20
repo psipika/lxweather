@@ -14,7 +14,8 @@ lxweather_CPPFLAGS=     \
  $(DEPENDENCIES_CFLAGS)
 
 lxweather_LDADD=      \
- $(DEPENDENCIES_LIBS)
+ $(DEPENDENCIES_LIBS) \
+ -lpthread
 
 EXTRA_DIST =         \
  logutil.h           \
