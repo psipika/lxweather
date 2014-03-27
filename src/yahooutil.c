@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2012-2013 Piotr Sipika; see the AUTHORS file for more.
+ * Copyright (c) 2012-2014 Piotr Sipika; see the AUTHORS file for more.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -242,7 +242,7 @@ setImageIfDifferent(gchar ** pcStorage,
   if (g_strcmp0(*pcStorage, pczNewURL))
     {
       g_free(*pcStorage);
-
+      
       *pcStorage = g_strndup(pczNewURL, szURLLength);
 
       if (*pImage)
@@ -269,7 +269,7 @@ setImageIfDifferent(gchar ** pcStorage,
       GInputStream * pInputStream = g_memory_input_stream_new_from_data(pResponse,
                                                                         iDataSize,
                                                                         g_free);
-
+      
       GError * pError = NULL;
 
       *pImage = gdk_pixbuf_new_from_stream(pInputStream,
@@ -282,6 +282,8 @@ setImageIfDifferent(gchar ** pcStorage,
                   pError->message);
 
           g_error_free(pError);
+          
+          g_free(pInputStream);
 
           return -1;
         }
@@ -293,9 +295,12 @@ setImageIfDifferent(gchar ** pcStorage,
 
           g_error_free(pError);
 
+          g_free(pInputStream);
+
           return -1;
         }
 
+      g_free(pInputStream);
     }
 
   return 0;

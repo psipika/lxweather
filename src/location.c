@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2012-2013 Piotr Sipika; see the AUTHORS file for more.
+ * Copyright (c) 2012-2014 Piotr Sipika; see the AUTHORS file for more.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -172,13 +172,10 @@ copyLocation(gpointer * pDestination, gpointer pSource)
       LocationInfo * pSrc  = (LocationInfo *)pSource;
 
       pDest->pcAlias_ = g_strndup(pSrc->pcAlias_, 
-                                          (pSrc->pcAlias_)?strlen(pSrc->pcAlias_):0);
+                                  (pSrc->pcAlias_)?strlen(pSrc->pcAlias_):0);
 
       pDest->pcCity_ = g_strndup(pSrc->pcCity_, 
                                          (pSrc->pcCity_)?strlen(pSrc->pcCity_):0);
-
-      pDest->pcState_ = g_strndup(pSrc->pcState_, 
-                                          (pSrc->pcState_)?strlen(pSrc->pcState_):0);
 
       pDest->pcState_ = g_strndup(pSrc->pcState_, 
                                           (pSrc->pcState_)?strlen(pSrc->pcState_):0);

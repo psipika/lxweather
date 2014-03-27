@@ -10,7 +10,7 @@ libweather_la_SOURCES=         \
  $(top_srcdir)/src/weatherwidget.c \
  weather.c
 
-AM_CPPFLAGS=  \
+INCLUDES=  \
  -I$(top_srcdir)/src
 
 libweather_la_CPPFLAGS=     \
