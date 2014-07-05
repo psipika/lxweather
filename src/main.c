@@ -403,7 +403,6 @@ main(int argc, char **argv)
 
   /* setup our own signal handling for terminating signals */
   signal(SIGINT, sighandler);
-  signal(SIGKILL, sighandler);
   signal(SIGTERM, sighandler);
   signal(SIGHUP, sighandler);
 

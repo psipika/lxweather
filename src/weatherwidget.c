@@ -369,6 +369,7 @@ gtk_weather_destroy(GObject * object)
     }
   
   /* Need to free location and forecast. */
+  freeLocation(priv->previous_location);
   freeLocation(priv->location);
   freeForecast(priv->forecast);
 
@@ -1020,7 +1021,7 @@ gtk_weather_run_error_dialog(GtkWindow * parent, gchar * error_msg)
                                                         GTK_DIALOG_MODAL,
                                                         GTK_MESSAGE_ERROR,
                                                         GTK_BUTTONS_OK,
-                                                        error_msg);
+                                                        "%s", error_msg);
       
       gtk_weather_set_window_icon(GTK_WINDOW(error_dialog), "gtk-dialog-error");
       
@@ -1932,7 +1933,7 @@ gtk_weather_show_location_progress_bar(GtkWeather * weather)
       break;
     }
   
-  if (GTK_IS_WIDGET(dialog))
+  if (dialog && GTK_IS_WIDGET(dialog))
     {
       gtk_widget_destroy(dialog);
     }

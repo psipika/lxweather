@@ -145,8 +145,6 @@ getForecastQuery(gchar * pcQuery, const gchar * pczWOEID, const gchar czUnits)
 static gchar *
 convertToASCII(const gchar *pczInString)
 {
-  char * pcCurrLocale = setlocale(LC_CTYPE, NULL);
-
   // for UTF-8 to ASCII conversions
   setlocale(LC_CTYPE, "en_US");
 
@@ -188,8 +186,8 @@ convertToASCII(const gchar *pczInString)
       xmlFree(pxEscapedString);
     }
 
-  // restore locale
-  setlocale(LC_CTYPE, pcCurrLocale);
+  // restore default locale
+  setlocale(LC_CTYPE, "");
 
   return pcConvertedString;
 }
@@ -238,6 +236,8 @@ setImageIfDifferent(gchar ** pcStorage,
                     const gchar * pczNewURL,
                     const gsize szURLLength)
 {
+  int err = 0;
+
   // if diffrent, clear and set
   if (g_strcmp0(*pcStorage, pczNewURL))
     {
@@ -283,9 +283,7 @@ setImageIfDifferent(gchar ** pcStorage,
 
           g_error_free(pError);
           
-          g_free(pInputStream);
-
-          return -1;
+          err = -1;
         }
 
       if (!g_input_stream_close(pInputStream, NULL, &pError))
@@ -295,15 +293,12 @@ setImageIfDifferent(gchar ** pcStorage,
 
           g_error_free(pError);
 
-          g_free(pInputStream);
-
-          return -1;
+          err = -1;
         }
-
-      g_free(pInputStream);
+      
     }
 
-  return 0;
+  return err;
 }
 
 /**
