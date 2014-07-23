@@ -186,7 +186,7 @@ convertToASCII(const gchar *pczInString)
       xmlFree(pxEscapedString);
     }
 
-  // restore default locale
+  // restore locale to default
   setlocale(LC_CTYPE, "");
 
   return pcConvertedString;
@@ -242,7 +242,7 @@ setImageIfDifferent(gchar ** pcStorage,
   if (g_strcmp0(*pcStorage, pczNewURL))
     {
       g_free(*pcStorage);
-      
+
       *pcStorage = g_strndup(pczNewURL, szURLLength);
 
       if (*pImage)
@@ -269,7 +269,7 @@ setImageIfDifferent(gchar ** pcStorage,
       GInputStream * pInputStream = g_memory_input_stream_new_from_data(pResponse,
                                                                         iDataSize,
                                                                         g_free);
-      
+
       GError * pError = NULL;
 
       *pImage = gdk_pixbuf_new_from_stream(pInputStream,
