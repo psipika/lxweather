@@ -2,7 +2,6 @@ ACLOCAL_AMFLAGS= -I m4
 
 SUBDIRS=            \
  src                \
- src/lxpanel_plugin \
  doc
 
 dist-hook: lxweather.spec
@@ -25,7 +24,9 @@ rpm:	clean-local dist-gzip
 	.rpmbuild/RPMS/$(RPMARCH) \
 	.rpmbuild/tmp
 	cp -f $(PACKAGE)-$(VERSION).tar.gz .rpmbuild/SOURCES
-	rpmbuild --clean -ba $(top_srcdir)/lxweather.spec --define "_topdir $$PWD/.rpmbuild" --define "_tmppath $$PWD/.rpmbuild/tmp"
+	rpmbuild --clean -ba $(top_srcdir)/lxweather.spec \
+           --define "_topdir $$PWD/.rpmbuild"       \
+           --define "_tmppath $$PWD/.rpmbuild/tmp"
 	@echo "============================================================"
 	@echo "RPMs located in .rpmbuild/RPMS and .rpmbuild/SRPMS"
 

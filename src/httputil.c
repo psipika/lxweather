@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2012-2014 Piotr Sipika; see the AUTHORS file for more.
+ * Copyright (c) 2012-2015 Piotr Sipika; see the AUTHORS file for more.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,6 +26,8 @@
 #include <libxml/xmlmemory.h>
 
 #include <string.h>
+
+#define READ_BUFSZ 1024
 
 /**
  * Cleans up the nano HTTP state
@@ -63,15 +65,14 @@ gpointer
 getURL(const gchar * pczURL, gint * piRetCode, gint * piDataSize)
 {
   /* nanohttp magic */
-  gint iBufReadSize = 1024;
   gint iReadSize = 0;
   gint iCurrSize = 0;
 
   gpointer pInBuffer = NULL;
   gpointer pInBufferRef = NULL;
 
-  gchar cReadBuffer[iBufReadSize];
-  bzero(cReadBuffer, iBufReadSize);
+  gchar cReadBuffer[READ_BUFSZ];
+  bzero(cReadBuffer, READ_BUFSZ);
 
   xmlNanoHTTPInit();
 
@@ -100,7 +101,7 @@ getURL(const gchar * pczURL, gint * piRetCode, gint * piDataSize)
       return pInBuffer; // it's NULL
     }
 
-  while ((iReadSize = xmlNanoHTTPRead(pHTTPContext, cReadBuffer, iBufReadSize)) > 0)
+  while ((iReadSize = xmlNanoHTTPRead(pHTTPContext, cReadBuffer, READ_BUFSZ)) > 0)
     {
       // set return code
       *piRetCode = xmlNanoHTTPReturnCode(pHTTPContext);
@@ -125,7 +126,7 @@ getURL(const gchar * pczURL, gint * piRetCode, gint * piDataSize)
       iCurrSize += iReadSize;
 
       // clear read buffer
-      bzero(cReadBuffer, iBufReadSize);
+      bzero(cReadBuffer, READ_BUFSZ);
 
       *piDataSize = iCurrSize;
     }

@@ -1,5 +1,5 @@
 AC_COPYRIGHT([
-Copyright (c) 2012-2014 Piotr Sipika; see the AUTHORS file for more information.
+Copyright (c) 2012-2015 Piotr Sipika; see the AUTHORS file for more information.
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -19,7 +19,7 @@ See the COPYRIGHT file for more information.
 ])
 
 # Initialize Autoconf and Automake
-AC_INIT([lxweather], 0.0.2, [Piotr.Sipika AT gmail DOT com])
+AC_INIT([lxweather], 0.0.3, [Piotr.Sipika AT gmail DOT com])
 AC_CONFIG_SRCDIR([src/main.c])
 AM_INIT_AUTOMAKE([1.9.6 -Wall])
 AC_CONFIG_MACRO_DIR([m4])
@@ -95,7 +95,6 @@ AC_OUTPUT(
  lxweather.spec
  Makefile
  src/Makefile
- src/lxpanel_plugin/Makefile
  doc/Makefile
  po/Makefile.in
 )
