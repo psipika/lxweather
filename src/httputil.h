@@ -30,14 +30,14 @@ static const gint HTTP_STATUS_OK = 200;
 /**
  * Returns the contents of the requested URL
  *
- * @param pczURL The URL to retrieve [in].
- * @param piRetCode The return code supplied with the response [out].
- * @param piDataSize The resulting data length [out].
+ * @param url     The URL to retrieve [in].
+ * @param rc      The return code supplied with the response [out].
+ * @param datalen The resulting data length [out].
  *
  * @return A pointer to a null-terminated buffer containing the textual
  *         representation of the response. Must be freed by the caller.
  */
 gpointer
-getURL(const gchar * pczURL, gint * piRetCode, gint * piDataSize);
+getURL(const gchar * url, gint * rc, gint * datalen);
 
 #endif

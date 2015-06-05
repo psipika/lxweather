@@ -29,24 +29,24 @@
  * Reads configuration from the specified path and returns a list of 
  * LocationInfo pointers.
  *
- * @param pczPath Path to configuration file with key=value pairs.
+ * @param path Path to configuration file with key=value pairs.
  *
  * @return a list of LocationInfo pointers, or NULL on error
  *
  * @note The caller must free the returned list.
  */
 GList *
-getLocationsFromConfiguration(const gchar * pczPath);
+getLocationsFromConfiguration(const gchar * path);
 
 /**
  * Creates and fills 'Location' sections based on passed-in LocationInfo
  * objects.
  *
- * @param pList Pointer to the list with LocationInfo objects.
- * @param pczPath Path to the file where to save the locations.
+ * @param list Pointer to the list with LocationInfo objects.
+ * @param path Path to the file where to save the locations.
  */
 void
-saveLocationsToConfiguration(GList * pList, const gchar * pczPath);
+saveLocationsToConfiguration(GList * list, const gchar * path);
 
 
 #endif

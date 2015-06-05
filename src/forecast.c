@@ -30,135 +30,128 @@
  * Provides the mechanism to free any data associated with 
  * the Forecast structure
  *
- * @param pEntry Entry to free.
+ * @param forecast Entry to free.
  *
  */
 static void
-freeForecastForecast(Forecast * pEntry)
+freeForecastForecast(Forecast * forecast)
 {
-  g_free(pEntry->pcDay_);
-  //  g_free(pEntry->iHigh_);
-  //  g_free(pEntry->iLow_);
-  g_free(pEntry->pcConditions_);
+  g_free(forecast->day_);
+  g_free(forecast->conditions_);
 }
 
 /**
  * Provides the mechanism to free any data associated with 
  * the ForecastUnits structure
  *
- * @param pEntry Entry to free.
+ * @param units Entry to free.
  *
  */
 static void
-freeForecastUnits(ForecastUnits * pEntry)
+freeForecastUnits(ForecastUnits * units)
 {
-  g_free(pEntry->pcDistance_);
-  g_free(pEntry->pcPressure_);
-  g_free(pEntry->pcSpeed_);
-  g_free(pEntry->pcTemperature_);
+  g_free(units->distance_);
+  g_free(units->pressure_);
+  g_free(units->speed_);
+  g_free(units->temperature_);
 }
 
 /**
  * Provides the mechanism to free any data associated with 
  * the ForecastInfo structure
  *
- * @param pData Entry to free.
+ * @param forecast Entry to free.
  *
  */
 void
-freeForecast(gpointer pData)
+freeForecast(gpointer forecast)
 {
-  if (!pData)
+  if (!forecast)
     {
       return;
     }
 
-  ForecastInfo * pEntry = (ForecastInfo *)pData;
+  ForecastInfo * info = (ForecastInfo *)forecast;
 
-  freeForecastUnits(&pEntry->units_);
+  freeForecastUnits(&info->units_);
 
-  freeForecastForecast(&pEntry->today_);
-  freeForecastForecast(&pEntry->tomorrow_);
+  freeForecastForecast(&info->today_);
+  freeForecastForecast(&info->tomorrow_);
 
-  /*  g_free(pEntry->iWindChill_); */
-  g_free(pEntry->pcWindDirection_);
-  /*  g_free(pEntry->iWindSpeed_);
-  g_free(pEntry->iHumidity_);
-  g_free(pEntry->dPressure_);
-  g_free(pEntry->dVisibility_);*/
-  g_free(pEntry->pcSunrise_);
-  g_free(pEntry->pcSunset_);
-  g_free(pEntry->pcTime_);
-  //  g_free(pEntry->iTemperature_);
-  g_free(pEntry->pcConditions_);
-  g_free(pEntry->pcImageURL_);
+  g_free(info->windDirection_);
+  g_free(info->sunrise_);
+  g_free(info->sunset_);
+  g_free(info->time_);
+  g_free(info->conditions_);
+  g_free(info->imageURL_);
   
-  if (pEntry->pImage_)
+  if (info->image_)
     {
-      g_object_unref(pEntry->pImage_);
+      g_object_unref(info->image_);
     }
 
-  g_free(pData);
+  g_free(forecast);
 }
 
 /**
  * Prints the contents of the supplied entry to stdout
  *
- * @param pEntry Entry contents of which to print.
+ * @param forecast Entry contents of which to print.
  *
  */
 void
-printForecast(gpointer pEntry G_GNUC_UNUSED)
+printForecast(gpointer forecast G_GNUC_UNUSED)
 {
 #ifdef DEBUG
-  if (!pEntry)
+  if (!forecast)
     {
       LXW_LOG(LXW_ERROR, "forecast::printForecast(): Entry: NULL");
       
       return;
     }
   
-  ForecastInfo * pInfo = (ForecastInfo *)pEntry;
+  ForecastInfo * info = (ForecastInfo *)forecast;
   
-  LXW_LOG(LXW_VERBOSE, "Forecast at %s:", (const char *)pInfo->pcTime_);
-  LXW_LOG(LXW_VERBOSE, "\tTemperature: %d%s", 
-          pInfo->iTemperature_,
-          (const char *)pInfo->units_.pcTemperature_);
-  LXW_LOG(LXW_VERBOSE, "\tHumidity: %d%s", pInfo->iHumidity_, "%");
+  LXW_LOG(LXW_VERBOSE, "Forecast at %s:",     (const char *)info->time_);
+  LXW_LOG(LXW_VERBOSE, "\tTemperature: %d%s",
+          info->temperature_,
+          (const char *)info->units_.temperature_);
+
+  LXW_LOG(LXW_VERBOSE, "\tHumidity: %d%", info->humidity_);
   LXW_LOG(LXW_VERBOSE, "\tWind chill: %d%s, speed: %d%s, direction %s", 
-          pInfo->iWindChill_,
-          (const char *)pInfo->units_.pcTemperature_,
-          pInfo->iWindSpeed_,
-          (const char *)pInfo->units_.pcSpeed_,
-          pInfo->pcWindDirection_);
+          info->windChill_,
+          (const char *)info->units_.temperature_,
+          info->windSpeed_,
+          (const char *)info->units_.speed_,
+          info->windDirection_);
   LXW_LOG(LXW_VERBOSE, "\tPressure: %2.02f%s and %s", 
-          pInfo->dPressure_,
-          (const char *)pInfo->units_.pcPressure_,
-          ((pInfo->pressureState_ == STEADY)?"steady":
-           (pInfo->pressureState_ == RISING)?"rising":
-           (pInfo->pressureState_ == FALLING)?"falling":"?"));
-  LXW_LOG(LXW_VERBOSE, "\tConditions: %s", (const char *)pInfo->pcConditions_);
+          info->pressure_,
+          (const char *)info->units_.pressure_,
+          ((info->pressureState_ == STEADY)?"steady":
+           (info->pressureState_ == RISING)?"rising":
+           (info->pressureState_ == FALLING)?"falling":"?"));
+  LXW_LOG(LXW_VERBOSE, "\tConditions: %s", (const char *)info->conditions_);
   LXW_LOG(LXW_VERBOSE, "\tVisibility: %3.02f%s", 
-          pInfo->dVisibility_,
-          (const char *)pInfo->units_.pcDistance_);
-  LXW_LOG(LXW_VERBOSE, "\tSunrise: %s", (const char *)pInfo->pcSunrise_);
-  LXW_LOG(LXW_VERBOSE, "\tSunset: %s", (const char *)pInfo->pcSunset_);
-  LXW_LOG(LXW_VERBOSE, "\tImage URL: %s", pInfo->pcImageURL_);
+          info->visibility_,
+          (const char *)info->units_.distance_);
+  LXW_LOG(LXW_VERBOSE, "\tSunrise: %s", (const char *)info->sunrise_);
+  LXW_LOG(LXW_VERBOSE, "\tSunset: %s", (const char *)info->sunset_);
+  LXW_LOG(LXW_VERBOSE, "\tImage URL: %s", info->imageURL_);
 
   LXW_LOG(LXW_VERBOSE, "\tTwo-day forecast:");
   LXW_LOG(LXW_VERBOSE, "\t\t%s: High: %d%s, Low: %d%s, Conditions: %s",
-          (const char *)pInfo->today_.pcDay_,
-          pInfo->today_.iHigh_,
-          (const char *)pInfo->units_.pcTemperature_,
-          pInfo->today_.iLow_,
-          (const char *)pInfo->units_.pcTemperature_,
-          (const char *)pInfo->today_.pcConditions_);
+          (const char *)info->today_.day_,
+          info->today_.high_,
+          (const char *)info->units_.temperature_,
+          info->today_.low_,
+          (const char *)info->units_.temperature_,
+          (const char *)info->today_.conditions_);
   LXW_LOG(LXW_VERBOSE, "\t\t%s: High: %d%s, Low: %d%s, Conditions: %s",
-          (const char *)pInfo->tomorrow_.pcDay_,
-          pInfo->tomorrow_.iHigh_,
-          (const char *)pInfo->units_.pcTemperature_,
-          pInfo->tomorrow_.iLow_,
-          (const char *)pInfo->units_.pcTemperature_,
-          (const char *)pInfo->tomorrow_.pcConditions_);
+          (const char *)info->tomorrow_.day_,
+          info->tomorrow_.high_,
+          (const char *)info->units_.temperature_,
+          info->tomorrow_.low_,
+          (const char *)info->units_.temperature_,
+          (const char *)info->tomorrow_.conditions_);
 #endif
 }

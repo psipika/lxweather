@@ -28,25 +28,25 @@
 /**
  * Retrieves the details for the specified location
  *
- * @param pczLocation The string containing the name/code of the location
+ * @param location The string containing the name/code of the location
  *
  * @return A pointer to a list of LocationInfo entries, possibly empty, 
  *         if no details were found. Caller is responsible for freeing the list.
  */
 GList *
-getLocationInfo(const gchar * pczLocation);
+getLocationInfo(const gchar * location);
 
 /**
  * Retrieves the forecast for the specified location WOEID
  *
- * @param pczWOEID The string containing the WOEID of the location
- * @param czUnits The character containing the units for the forecast (c|f)
- * @param pForecast The pointer to the forecast to be filled. If set to NULL,
- *                  a new one will be allocated.
+ * @param woeid The string containing the WOEID of the location
+ * @param units The character containing the units for the forecast (c|f)
+ * @param forecast The pointer to the forecast to be filled. If set to NULL,
+ *                 a new one will be allocated.
  *
  */
 void
-getForecastInfo(const gchar * pczWOEID, const gchar czUnits, gpointer pForecast);
+getForecastInfo(const gchar * woeid, const gchar units, gpointer forecast);
 
 /**
  * Initializes the internals: XML and HTTP

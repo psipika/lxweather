@@ -36,10 +36,10 @@ typedef enum
 /**
  * Initializes the logging subsystem
  *
- * @param pczPath Path to a file to log to (can be NULL for std{out|err},
+ * @param path Path to a file to log to (can be NULL for std{out|err},
  *                or 'syslog' for syslog)
  */
-void initializeLogUtil(const char * pczPath);
+void initializeLogUtil(const char * path);
 
 /**
  * Cleans up the logging subsystem
@@ -51,9 +51,9 @@ void cleanupLogUtil();
  * Logs the message using the specified level.
  *
  * @param level The level to log at
- * @param pczMsg Message to log
+ * @param msg   Message to log
  */
-void logUtil(LXWEATHER_LOGLEVEL level, const char * pczMsg, ...);
+void logUtil(LXWEATHER_LOGLEVEL level, const char * msg, ...);
 
 /**
  * Sets the maximum allowed log level

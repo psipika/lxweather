@@ -53,58 +53,58 @@ typedef enum
 
 typedef struct
 {
-  gchar * pcDay_;
-  gint iHigh_;
-  gint iLow_;
-  gchar * pcConditions_;
+  gchar * day_;
+  gint    high_;
+  gint    low_;
+  gchar * conditions_;
 } Forecast;
 
 typedef struct
 {
-  gchar * pcDistance_;
-  gchar * pcPressure_;
-  gchar * pcSpeed_;
-  gchar * pcTemperature_;
+  gchar * distance_;
+  gchar * pressure_;
+  gchar * speed_;
+  gchar * temperature_;
 } ForecastUnits;
 
 typedef struct 
 {
   ForecastUnits units_;
   PressureState pressureState_;
-  Forecast today_;
-  Forecast tomorrow_;
-  gint iWindChill_;
-  gchar * pcWindDirection_;
-  gint iWindSpeed_;
-  gint iHumidity_;
-  gdouble dPressure_;
-  gdouble dVisibility_;
-  gchar * pcSunrise_;
-  gchar * pcSunset_;
-  gchar * pcTime_;
-  gint iTemperature_;
-  gchar * pcConditions_;
-  gchar * pcImageURL_;
-  GdkPixbuf * pImage_;
+  Forecast      today_;
+  Forecast      tomorrow_;
+  gint     windChill_;
+  gchar *  windDirection_;
+  gint     windSpeed_;
+  gint     humidity_;
+  gdouble  pressure_;
+  gdouble  visibility_;
+  gchar *  sunrise_;
+  gchar *  sunset_;
+  gchar *  time_;
+  gint     temperature_;
+  gchar *  conditions_;
+  gchar *  imageURL_;
+  GdkPixbuf * image_;
 } ForecastInfo;
 
 /**
  * Provides the mechanism to free any data associated with 
  * the ForecastInfo structure
  *
- * @param pData Entry to free.
+ * @param forecast Entry to free.
  *
  */
 void
-freeForecast(gpointer pData);
+freeForecast(gpointer forecast);
 
 /**
  * Prints the contents of the supplied entry to stdout
  *
- * @param pEntry Entry contents of which to print.
+ * @param forecast Entry contents of which to print.
  *
  */
 void
-printForecast(gpointer pEntry);
+printForecast(gpointer forecast);
 
 #endif

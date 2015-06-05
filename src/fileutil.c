@@ -25,8 +25,6 @@
 #include "location.h"
 #include "logutil.h"
 
-#include <gio/gio.h>
-
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -37,33 +35,35 @@
 #include <ctype.h>
 #include <stdarg.h>
 
-static void     fillLocationList             (GList ** ppList, GKeyFile * pKeyFile);
-static gboolean createConfigurationDirectory (const gchar * pczPath);
-static gboolean fillKeyFile                  (GKeyFile ** ppKeyFile, GList * pList);
+#include <gio/gio.h>
+
+static void     fillLocationList             (GList ** list, GKeyFile * keyfile);
+static gboolean createConfigurationDirectory (const gchar * path);
+static gboolean fillKeyFile                  (GKeyFile ** keyfile, GList * list);
 
 /**
  * Reads configuration from the specified path and returns a list of 
  * LocationInfo pointers.
  *
- * @param pczPath Path to configuration file with key=value pairs.
+ * @param path Path to configuration file with key=value pairs.
  *
  * @return a list of LocationInfo pointers, or NULL on error
  *
  * @note The caller must free the returned list.
  */
 GList *
-getLocationsFromConfiguration(const gchar * pczPath)
+getLocationsFromConfiguration(const gchar * path)
 {
-  LXW_LOG(LXW_DEBUG, "fileUtil::getLocationsFromConfiguration(%s)", pczPath);
+  LXW_LOG(LXW_DEBUG, "fileUtil::getLocationsFromConfiguration(%s)", path);
 
-  GList *    pList = NULL;
-  GError *   pError = NULL;
+  GList  * list = NULL;
+  GError * pError = NULL;
 
-  GKeyFile * pKeyFile = g_key_file_new();
+  GKeyFile * keyfile = g_key_file_new();
 
-  if (g_key_file_load_from_file(pKeyFile, pczPath, G_KEY_FILE_NONE, &pError))
+  if (g_key_file_load_from_file(keyfile, path, G_KEY_FILE_NONE, &pError))
     {
-      fillLocationList(&pList, pKeyFile);
+      fillLocationList(&list, keyfile);
     }
   else
     {
@@ -71,66 +71,66 @@ getLocationsFromConfiguration(const gchar * pczPath)
       if (pError)
         {
           LXW_LOG(LXW_ERROR, "Failed to read configuration at %s: %s",
-                  pczPath, pError->message);
+                  path, pError->message);
 
           g_error_free(pError);
         }
 
     }
 
-  g_key_file_free(pKeyFile);
+  g_key_file_free(keyfile);
 
   /* Reverse list, if filled */
-  pList = g_list_reverse(pList);
+  list = g_list_reverse(list);
 
-  return pList;
+  return list;
 }
 
 /**
  * Creates and fills 'Location' sections based on passed-in LocationInfo
  * objects.
  *
- * @param pList Pointer to the list with LocationInfo objects.
- * @param pczPath Path to the file where to save the locations.
+ * @param list Pointer to the list with LocationInfo objects.
+ * @param path Path to the file where to save the locations.
  */
 void
-saveLocationsToConfiguration(GList * pList, const gchar * pczPath)
+saveLocationsToConfiguration(GList * list, const gchar * path)
 {
-  LXW_LOG(LXW_DEBUG, "fileUtil::saveLocationsToConfiguration(%s)", pczPath);
+  LXW_LOG(LXW_DEBUG, "fileUtil::saveLocationsToConfiguration(%s)", path);
 
-  GKeyFile * pKeyFile = g_key_file_new();
+  GKeyFile * keyfile = g_key_file_new();
 
   /* populate key file object */
-  if (!fillKeyFile(&pKeyFile, pList))
+  if (!fillKeyFile(&keyfile, list))
     {
       /* No valid entries */
       return;
     }
 
   /* Check if directory exists, create if it doesn't */
-  if (!createConfigurationDirectory(pczPath))
+  if (!createConfigurationDirectory(path))
     {
       return;
     }
 
-  GFile * pFile = g_file_new_for_path(pczPath);
+  GFile * file = g_file_new_for_path(path);
 
   /* Get an output stream and write to it */
   GError * pError = NULL;
 
-  GFileOutputStream * pOutputStream = g_file_replace(pFile,
-                                                     NULL,
-                                                     TRUE,
-                                                     G_FILE_CREATE_PRIVATE,
-                                                     NULL,
-                                                     &pError);
+  GFileOutputStream * ostream = g_file_replace(file,
+                                               NULL,
+                                               TRUE,
+                                               G_FILE_CREATE_PRIVATE,
+                                               NULL,
+                                               &pError);
 
-  if (pOutputStream)
+  if (ostream)
     {
       /* Everything is OK */
-      gsize szDataLen = 0;
+      gsize datalen = 0;
 
-      gchar * pcData = g_key_file_to_data(pKeyFile, &szDataLen, &pError);
+      gchar * data = g_key_file_to_data(keyfile, &datalen, &pError);
 
       if (pError)
         {
@@ -140,12 +140,12 @@ saveLocationsToConfiguration(GList * pList, const gchar * pczPath)
         }
       else
         {
-          gsize szBytesWritten = 0;
+          gsize writelen = 0;
 
-          if (!g_output_stream_write_all((GOutputStream *)pOutputStream,
-                                         pcData,
-                                         szDataLen,
-                                         &szBytesWritten,
+          if (!g_output_stream_write_all((GOutputStream *)ostream,
+                                         data,
+                                         datalen,
+                                         &writelen,
                                          NULL,
                                          &pError))
             {
@@ -157,61 +157,60 @@ saveLocationsToConfiguration(GList * pList, const gchar * pczPath)
 
         }
 
-      g_free(pcData);
+      g_free(data);
       
-      g_object_unref(pOutputStream);
+      g_object_unref(ostream);
     }
   else
     {
-      LXW_LOG(LXW_ERROR, "Failed to create %s: %s", pczPath, pError->message);
+      LXW_LOG(LXW_ERROR, "Failed to create %s: %s", path, pError->message);
 
       g_error_free(pError);
     }
 
-  g_object_unref(pFile);
+  g_object_unref(file);
 
-  g_key_file_free(pKeyFile);
+  g_key_file_free(keyfile);
 }
 
 /**
  * Creates the configuration directory specified at startup.
  *
- * @param pczPath Path to the configuration file to use.
+ * @param path Path to the configuration file to use.
  *
  * @return TRUE on success, FALSE on any error or failure.
  */
 static gboolean
-createConfigurationDirectory(const gchar * pczPath)
+createConfigurationDirectory(const gchar * path)
 {
-  LXW_LOG(LXW_DEBUG, "fileUtil::createConfigurationDirectory(%s)", pczPath);
+  LXW_LOG(LXW_DEBUG, "fileUtil::createConfigurationDirectory(%s)", path);
 
+  gboolean retval = FALSE;
 
-  gboolean bRetVal = FALSE;
+  gchar * dirpath = g_path_get_dirname(path);
 
-  gchar * pcPathDir = g_path_get_dirname(pczPath);
+  struct stat st;
 
-  struct stat pathStat;
-
-  if (stat(pcPathDir, &pathStat) == -1)
+  if (stat(dirpath, &st) == -1)
     {
       /* Non-existence is not an error */
       if (errno == ENOENT)
         {
-          if (mkdir(pcPathDir, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) == 0)
+          if (mkdir(dirpath, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) == 0)
             {
-              bRetVal = TRUE;
+              retval = TRUE;
             }
           else
             {
               /* Check error number, if the directory exists, we're OK */
               if (errno == EEXIST)
                 {
-                  bRetVal = TRUE;
+                  retval = TRUE;
                 }
               else
                 {
                   LXW_LOG(LXW_ERROR, "Failed to retrieve file information on %s: %s",
-                          pcPathDir, strerror(errno));
+                          dirpath, strerror(errno));
                 }
 
             }
@@ -220,201 +219,213 @@ createConfigurationDirectory(const gchar * pczPath)
       else
         {
           LXW_LOG(LXW_ERROR, "Failed to retrieve file information on %s: %s",
-                  pcPathDir, strerror(errno));
+                  dirpath, strerror(errno));
         }
 
     }
-  else if (S_ISDIR(pathStat.st_mode))
+  else if (S_ISDIR(st.st_mode))
     {
-      bRetVal = TRUE;
+      retval = TRUE;
     }
 
-  g_free(pcPathDir);
+  g_free(dirpath);
 
-  return bRetVal;
+  return retval;
 }
 
 /**
  * Goes through all 'Location' sections and creates LocationInfo objects
  * based on key=value pairs
  *
- * @param ppList Pointer to the LocationInfo list pointer.
- * @param pKeyFile Pointer to the configuration file.
+ * @param list    Pointer to the LocationInfo list pointer.
+ * @param keyfile Pointer to the configuration file.
  */
 static void
-fillLocationList(GList ** ppList, GKeyFile * pKeyFile)
+fillLocationList(GList ** list, GKeyFile * keyfile)
 {
   LXW_LOG(LXW_DEBUG, "fileUtil::fillLocationList()");
 
-  gsize szGroupCount = 0;
+  gsize groupcnt = 0;
+  gsize groupidx = 0;
 
-  gchar ** pGroupNameList = g_key_file_get_groups(pKeyFile, &szGroupCount);
+  gchar ** groupnames = g_key_file_get_groups(keyfile, &groupcnt);
 
-  gsize szGroupIndex = 0;
-
-  for (; szGroupIndex < szGroupCount; ++szGroupIndex)
+  for (; groupidx < groupcnt; ++groupidx)
     {
       /* See if this group is 'Location N' */
       
-      gchar ** pGroupNameTokens = g_strsplit(pGroupNameList[szGroupIndex], " ", 2);
+      gchar ** nametokens = g_strsplit(groupnames[groupidx], " ", 2);
                                              
-      if (g_ascii_strncasecmp(pGroupNameTokens[0],
+      if (g_ascii_strncasecmp(nametokens[0],
                               LOCATIONINFO_GROUP_NAME,
                               LOCATIONINFO_GROUP_NAME_LENGTH))
         {
           /* A match would produce a FALSE return value, 
            * so this group is not 'Location N' */
-          LXW_LOG(LXW_ERROR, "Group: '%s' not handled", pGroupNameList[szGroupIndex]);
+          LXW_LOG(LXW_ERROR, "Group: '%s' not handled", groupnames[groupidx]);
         }
       else
         {          
-          gchar * pcWOEID = g_key_file_get_string(pKeyFile,
-                                                  pGroupNameList[szGroupIndex],
-                                                  LocationInfoFieldNames[WOEID],
-                                                  NULL);
+          gchar * woeid = g_key_file_get_string(keyfile,
+                                                groupnames[groupidx],
+                                                LocationInfoFieldNames[WOEID],
+                                                NULL);
               
-          gchar * pcAlias = g_key_file_get_string(pKeyFile,
-                                                  pGroupNameList[szGroupIndex],
-                                                  LocationInfoFieldNames[ALIAS],
-                                                  NULL);
+          gchar * alias = g_key_file_get_string(keyfile,
+                                                groupnames[groupidx],
+                                                LocationInfoFieldNames[ALIAS],
+                                                NULL);
 
           LXW_LOG(LXW_DEBUG, "Group name: %s, Alias: %s, WOEID: %s",
-                  pGroupNameList[szGroupIndex], pcAlias, pcWOEID);
+                  groupnames[groupidx], alias, woeid);
 
           /* We MUST have WOEID and Alias */
-          if (!pcWOEID || !strlen(pcWOEID) || !pcAlias || !strlen(pcAlias))
+          if (!woeid || !strlen(woeid) || !alias || !strlen(alias))
             {
               /* just in case they're emtpy strings */
-              g_free(pcWOEID);
-              g_free(pcAlias);
+              g_free(woeid);
+              g_free(alias);
 
               continue;
             }
 
-          gchar * pcCity = g_key_file_get_string(pKeyFile,
-                                                 pGroupNameList[szGroupIndex],
-                                                 LocationInfoFieldNames[CITY],
+          gchar * city = g_key_file_get_string(keyfile,
+                                               groupnames[groupidx],
+                                               LocationInfoFieldNames[CITY],
+                                               NULL);
+
+          gchar * state = g_key_file_get_string(keyfile,
+                                                groupnames[groupidx],
+                                                LocationInfoFieldNames[STATE],
+                                                NULL);
+
+          gchar * country = g_key_file_get_string(keyfile,
+                                                  groupnames[groupidx],
+                                                  LocationInfoFieldNames[COUNTRY],
+                                                  NULL);
+
+          gchar * units = g_key_file_get_string(keyfile,
+                                                groupnames[groupidx],
+                                                LocationInfoFieldNames[UNITS],
+                                                NULL);
+
+          gint interval = g_key_file_get_integer(keyfile,
+                                                 groupnames[groupidx],
+                                                 LocationInfoFieldNames[INTERVAL],
                                                  NULL);
 
-          gchar * pcState = g_key_file_get_string(pKeyFile,
-                                                  pGroupNameList[szGroupIndex],
-                                                  LocationInfoFieldNames[STATE],
-                                                  NULL);
-
-          gchar * pcCountry = g_key_file_get_string(pKeyFile,
-                                                    pGroupNameList[szGroupIndex],
-                                                    LocationInfoFieldNames[COUNTRY],
+          gboolean enabled = g_key_file_get_boolean(keyfile,
+                                                    groupnames[groupidx],
+                                                    LocationInfoFieldNames[ENABLED],
                                                     NULL);
 
-          gchar * pcUnits = g_key_file_get_string(pKeyFile,
-                                                  pGroupNameList[szGroupIndex],
-                                                  LocationInfoFieldNames[UNITS],
-                                                  NULL);
+          LocationInfo * location = g_try_new0(LocationInfo, 1);
 
-          gint iInterval = g_key_file_get_integer(pKeyFile,
-                                                  pGroupNameList[szGroupIndex],
-                                                  LocationInfoFieldNames[INTERVAL],
-                                                  NULL);
-
-          gboolean bEnabled = g_key_file_get_boolean(pKeyFile,
-                                                     pGroupNameList[szGroupIndex],
-                                                     LocationInfoFieldNames[ENABLED],
-                                                     NULL);
-
-          LocationInfo * pLocation = g_try_new0(LocationInfo, 1);
-
-          if (pLocation)
+          if (location)
             {
-              pLocation->pcAlias_ = g_strndup(pcAlias, strlen(pcAlias));
-              pLocation->pcCity_ = (pcCity)?g_strndup(pcCity, strlen(pcCity)):NULL;
-              pLocation->pcState_ = (pcState)?g_strndup(pcState, strlen(pcState)):NULL;
-              pLocation->pcCountry_ = (pcCountry)?g_strndup(pcCountry, strlen(pcCountry)):NULL;
-              pLocation->pcWOEID_ = g_strndup(pcWOEID, strlen(pcWOEID));
-              pLocation->cUnits_ = pcUnits ? pcUnits[0] : 'f';
-              pLocation->uiInterval_ = (iInterval > 0) ? iInterval : 1;
-              pLocation->bEnabled_ = bEnabled;
+              location->alias_     = g_strndup(alias, strlen(alias));
+              location->city_      = (city)?g_strndup(city, strlen(city)):NULL;
+              location->state_     = (state)?g_strndup(state, strlen(state)):NULL;
+              location->country_   = (country)?g_strndup(country, strlen(country)):NULL;
+              location->woeid_     = g_strndup(woeid, strlen(woeid));
+              location->units_     = units ? units[0] : 'f';
+              location->interval_  = (interval > 0) ? interval : 1;
+              location->enabled_   = enabled;
 
-              *ppList = g_list_prepend(*ppList, pLocation);
+              *list = g_list_prepend(*list, location);
             }
 
-          g_free(pcAlias);
-          g_free(pcCity);
-          g_free(pcState);
-          g_free(pcCountry);
-          g_free(pcWOEID);
-          g_free(pcUnits);
+          g_free(alias);
+          g_free(city);
+          g_free(state);
+          g_free(country);
+          g_free(woeid);
+          g_free(units);
         }
 
       /* Free the token list */
-      g_strfreev(pGroupNameTokens);
+      g_strfreev(nametokens);
     }
 
-  g_strfreev(pGroupNameList);
+  g_strfreev(groupnames);
 }
 
 /**
  * Fills the supplied key file with data from the list.
  *
- * @param ppKeyFile Pointer to the key file to fill in
- * @param pList     Pointer to the list to use data from
+ * @param keyfile Pointer to the key file to fill in
+ * @param list    Pointer to the list to use data from
  *
  * @return TRUE if there was at least one location to save, FALSE otherwise.
  */
 static gboolean
-fillKeyFile(GKeyFile ** ppKeyFile, GList * pList)
+fillKeyFile(GKeyFile ** keyfile, GList * list)
 {
   LXW_LOG(LXW_DEBUG, "fileUtil::fillKeyFile()");
 
-  gboolean bRetVal = FALSE;
+  gboolean retval = FALSE;
 
-  gint iSize = g_list_length(pList);
+  gint listsz = g_list_length(list);
 
   int i = 0;
-
-  for (; i < iSize; ++i)
+  for (; i < listsz; ++i)
     {
-      LocationInfo * pLocation = (LocationInfo *)g_list_nth_data(pList, i);
+      LocationInfo * location = (LocationInfo *)g_list_nth_data(list, i);
 
-      if (pLocation)
+      if (location)
         {
-          gchar * pcGroupName = g_strdup_printf("Location %d", i + 1);
+          gchar * group = g_strdup_printf("Location %d", i + 1);
 
-          g_key_file_set_string(*ppKeyFile, pcGroupName, 
-                                LocationInfoFieldNames[ALIAS], pLocation->pcAlias_);
+          g_key_file_set_string(*keyfile, group, 
+                                LocationInfoFieldNames[ALIAS],
+                                location->alias_);
           
-          if (pLocation->pcCity_)
+          if (location->city_)
             {
-              g_key_file_set_string(*ppKeyFile, pcGroupName, 
-                                    LocationInfoFieldNames[CITY], pLocation->pcCity_);
+              g_key_file_set_string(*keyfile, group, 
+                                    LocationInfoFieldNames[CITY],
+                                    location->city_);
             }
 
-          if (pLocation->pcState_)
+          if (location->state_)
             {
-              g_key_file_set_string(*ppKeyFile, pcGroupName, 
-                                    LocationInfoFieldNames[STATE], pLocation->pcState_);
+              g_key_file_set_string(*keyfile, group, 
+                                    LocationInfoFieldNames[STATE],
+                                    location->state_);
             }
 
-          if (pLocation->pcCountry_)
+          if (location->country_)
             {
-              g_key_file_set_string(*ppKeyFile, pcGroupName, 
-                                    LocationInfoFieldNames[COUNTRY], pLocation->pcCountry_);
+              g_key_file_set_string(*keyfile, group, 
+                                    LocationInfoFieldNames[COUNTRY],
+                                    location->country_);
             }
 
-          g_key_file_set_string(*ppKeyFile, pcGroupName, 
-                                LocationInfoFieldNames[WOEID], pLocation->pcWOEID_);
-          g_key_file_set_string(*ppKeyFile, pcGroupName, 
-                                LocationInfoFieldNames[UNITS], &pLocation->cUnits_);
-          g_key_file_set_integer(*ppKeyFile, pcGroupName, 
-                                 LocationInfoFieldNames[INTERVAL], (gint)pLocation->uiInterval_);
-          g_key_file_set_boolean(*ppKeyFile, pcGroupName, 
-                                 LocationInfoFieldNames[ENABLED], pLocation->bEnabled_);
+          g_key_file_set_string(*keyfile,
+                                group,
+                                LocationInfoFieldNames[WOEID],
+                                location->woeid_);
+          
+          g_key_file_set_string(*keyfile,
+                                group, 
+                                LocationInfoFieldNames[UNITS],
+                                &location->units_);
+          
+          g_key_file_set_integer(*keyfile,
+                                 group, 
+                                 LocationInfoFieldNames[INTERVAL],
+                                 (gint)location->interval_);
+          
+          g_key_file_set_boolean(*keyfile, group,
+                                 LocationInfoFieldNames[ENABLED],
+                                 location->enabled_);
 
-          g_free(pcGroupName);
+          g_free(group);
 
-          bRetVal = TRUE;
+          retval = TRUE;
         }
 
     }
 
-  return bRetVal;
+  return retval;
 }

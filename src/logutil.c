@@ -32,52 +32,52 @@
 #include <string.h>
 #include <errno.h>
 
-static int g_Initialized = 0;
-static LXWEATHER_LOGLEVEL g_Level = LXW_NONE;
-static int g_FD = -1; /* -1 is syslog, 0 is std{out|err} */
+static int g_initialized = 0;
+static LXWEATHER_LOGLEVEL g_level = LXW_NONE;
+static int g_fd = -1; /* -1 is syslog, 0 is std{out|err} */
 
 /**
  * Initializes the logging subsystem
  *
- * @param pczPath Path to a file to log to (can be NULL for std{out|err},
- *                or 'syslog' for syslog)
+ * @param path Path to a file to log to (can be NULL for std{out|err},
+ *             or 'syslog' for syslog)
  */
 void 
-initializeLogUtil(const char * pczPath)
+initializeLogUtil(const char * path)
 {
 #ifndef DEBUG
   return;
 #endif
 
-  if (g_Initialized)
+  if (g_initialized)
     {
       return;
     }
 
-  if (pczPath)
+  if (path)
     {
-      if (strncmp(pczPath, "syslog", 6) == 0)
+      if (strncmp(path, "syslog", 6) == 0)
         {
           /* syslog */
           openlog("LXWeather", LOG_NDELAY | LOG_PID, LOG_USER);
         }
-      else if (strncmp(pczPath, "std", 3) == 0)
+      else if (strncmp(path, "std", 3) == 0)
         {
           /* std{out|err} */
-          g_FD = 0;
+          g_fd = 0;
         }
       else
         {
           /* Attempt to open this file for writing */
-          g_FD = open(pczPath, 
+          g_fd = open(path, 
                       O_WRONLY | O_CREAT | O_CLOEXEC | O_TRUNC, 
                       S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
 
-          if (g_FD < 0)
+          if (g_fd < 0)
             {
               /* Failed */
               fprintf(stderr, "LXWeather::initalizeLogUtil(): Failed to open %s: %s\n",
-                      pczPath, strerror(errno));
+                      path, strerror(errno));
 
               /* Initialized flag is 0, so no logging will happen */
               return;
@@ -89,10 +89,10 @@ initializeLogUtil(const char * pczPath)
   else
     {
       /* stdout/err */
-      g_FD = 0;
+      g_fd = 0;
     }
 
-  g_Initialized = 1;
+  g_initialized = 1;
 }
 
 /**
@@ -106,9 +106,9 @@ cleanupLogUtil()
   return;
 #endif
 
-  if (g_Initialized)
+  if (g_initialized)
     {
-      switch (g_FD)
+      switch (g_fd)
         {
         case -1:
           closelog();
@@ -120,10 +120,10 @@ cleanupLogUtil()
 
         default:
           /* Close the file */
-          close(g_FD); /* Don't care about errors */
+          close(g_fd); /* Don't care about errors */
         }
 
-      g_Initialized = 0;
+      g_initialized = 0;
     }
 
 }
@@ -132,60 +132,57 @@ cleanupLogUtil()
  * Logs the message using the specified level.
  *
  * @param level The level to log at
- * @param pczMsg Message to log
+ * @param msg Message to log
  */
 void 
-logUtil(LXWEATHER_LOGLEVEL level, const char * pczMsg, ...)
+logUtil(LXWEATHER_LOGLEVEL level, const char * msg, ...)
 {
 #ifndef DEBUG
   return;
 #endif
 
-  if (g_Initialized && (level <= g_Level) && (g_Level > LXW_NONE))
+  if (g_initialized && (level <= g_level) && (g_level > LXW_NONE))
     {
       va_list ap;
             
-      va_start(ap, pczMsg);
+      va_start(ap, msg);
 
-      if (g_FD == -1)
+      if (g_fd == -1)
         {
-          int iSysLevel = (level == LXW_ERROR) ? LOG_ERR : LOG_NOTICE;
-          
-          vsyslog(iSysLevel, pczMsg, ap);
+          vsyslog(((level == LXW_ERROR) ? LOG_ERR : LOG_NOTICE), msg, ap);
         }
       else
         {
-          char cBuf[1024];
+          char buf[1024];
           
-          pid_t myPid = getpid();
+          pid_t pid = getpid();
 
           /* This is not portable, due to pid_t... */
-          size_t szBuf = snprintf(cBuf, sizeof(cBuf), "LXWeather [%ld] [%5s] ", 
-                                  (long)myPid, 
+          size_t bufsz = snprintf(buf, sizeof(buf), "LXWeather [%ld] [%5s] ", 
+                                  (long)pid, 
                                   (level == LXW_ERROR) ? "ERROR" : "DEBUG");
           
-          szBuf += vsnprintf(cBuf + szBuf, sizeof(cBuf) - szBuf, pczMsg, ap);
+          bufsz += vsnprintf(buf + bufsz, sizeof(buf) - bufsz, msg, ap);
           
-          szBuf += snprintf(cBuf + szBuf, sizeof(cBuf) - szBuf, "\n");
+          bufsz += snprintf(buf + bufsz, sizeof(buf) - bufsz, "\n");
 
-          if (g_FD == 0)
+          if (g_fd == 0)
             {
               /* std{out|err} */
 
               if (level == LXW_ERROR)
                 {
-                  fprintf(stderr, "%s", cBuf);
+                  fprintf(stderr, "%s", buf);
                 }
               else
                 {
-                  fprintf(stdout, "%s", cBuf);
+                  fprintf(stdout, "%s", buf);
                 }
             }
           else
             {
               /* write to file */
-              size_t wsz = write(g_FD, cBuf, szBuf);
-              (void) wsz; /* to prevent compile warning */
+              (void) write(g_fd, buf, bufsz); /* to prevent compile warning */
             }
         }
            
@@ -206,14 +203,14 @@ LXWEATHER_LOGLEVEL
 setMaxLogLevel(LXWEATHER_LOGLEVEL level)
 {
 #ifndef DEBUG
-  return g_Level;
+  return g_level;
 #endif
 
-  LXWEATHER_LOGLEVEL previous = g_Level;
+  LXWEATHER_LOGLEVEL previous = g_level;
 
-  if (g_Initialized && level <= LXW_ALL)
+  if (g_initialized && level <= LXW_ALL)
     {
-      g_Level = level;
+      g_level = level;
     }
 
   return previous;

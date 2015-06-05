@@ -40,56 +40,56 @@ const gchar * LocationInfoFieldNames[] = { "alias",
  * Provides the mechanism to free any data associated with 
  * the LocationInfo structure
  *
- * @param pData Entry to free.
+ * @param location Location entry to free.
  *
  */
 void
-freeLocation(gpointer pData)
+freeLocation(gpointer location)
 {
-  if (!pData)
+  if (!location)
     {
       return;
     }
 
-  LocationInfo * pEntry = (LocationInfo *)pData;
+  LocationInfo * pEntry = (LocationInfo *)location;
 
-  g_free(pEntry->pcAlias_);
-  g_free(pEntry->pcCity_);
-  g_free(pEntry->pcState_);
-  g_free(pEntry->pcCountry_);
-  g_free(pEntry->pcWOEID_);
+  g_free(pEntry->alias_);
+  g_free(pEntry->city_);
+  g_free(pEntry->state_);
+  g_free(pEntry->country_);
+  g_free(pEntry->woeid_);
 
-  g_free(pData);
+  g_free(location);
 }
 
 /**
  * Prints the contents of the supplied entry to stdout
  *
- * @param pEntry Entry contents of which to print.
+ * @param location Entry contents of which to print.
  *
  */
 void
-printLocation(gpointer pEntry G_GNUC_UNUSED)
+printLocation(gpointer location G_GNUC_UNUSED)
 {
 #ifdef DEBUG
-  if (!pEntry)
+  if (!location)
     {
       LXW_LOG(LXW_ERROR, "location::printLocation(): Entry: NULL");
       
       return;
     }
 
-  LocationInfo * pInfo = (LocationInfo *)pEntry;
+  LocationInfo * pInfo = (LocationInfo *)location;
 
   LXW_LOG(LXW_VERBOSE, "Entry:");
-  LXW_LOG(LXW_VERBOSE, "\tAlias: %s", (const char *)pInfo->pcAlias_);
-  LXW_LOG(LXW_VERBOSE, "\tCity: %s", (const char *)pInfo->pcCity_);
-  LXW_LOG(LXW_VERBOSE, "\tState: %s", (const char *)pInfo->pcState_);
-  LXW_LOG(LXW_VERBOSE, "\tCountry: %s", (const char *)pInfo->pcCountry_);
-  LXW_LOG(LXW_VERBOSE, "\tWOEID: %s", (const char *)pInfo->pcWOEID_);
-  LXW_LOG(LXW_VERBOSE, "\tUnits: %c", pInfo->cUnits_);
-  LXW_LOG(LXW_VERBOSE, "\tInterval: %u", pInfo->uiInterval_);
-  LXW_LOG(LXW_VERBOSE, "\tEnabled: %s", (pInfo->bEnabled_)?"yes":"no");
+  LXW_LOG(LXW_VERBOSE, "\tAlias: %s",    (const char *)pInfo->alias_);
+  LXW_LOG(LXW_VERBOSE, "\tCity: %s",     (const char *)pInfo->city_);
+  LXW_LOG(LXW_VERBOSE, "\tState: %s",    (const char *)pInfo->state_);
+  LXW_LOG(LXW_VERBOSE, "\tCountry: %s",  (const char *)pInfo->country_);
+  LXW_LOG(LXW_VERBOSE, "\tWOEID: %s",    (const char *)pInfo->woeid_);
+  LXW_LOG(LXW_VERBOSE, "\tUnits: %c",    pInfo->units_);
+  LXW_LOG(LXW_VERBOSE, "\tInterval: %u", pInfo->interval_);
+  LXW_LOG(LXW_VERBOSE, "\tEnabled: %s",  (pInfo->enabled_)?"yes":"no");
 #endif
 }
 
@@ -97,100 +97,88 @@ printLocation(gpointer pEntry G_GNUC_UNUSED)
 /**
  * Sets the alias for the location
  *
- * @param pEntry Pointer to the location to modify
- * @param pData  Alias value to use
+ * @param location Pointer to the location to modify
+ * @param alias    Alias value to use
  *
  */
 void
-setLocationAlias(gpointer pEntry, gpointer pData)
+setLocationAlias(gpointer location, gpointer alias)
 {
-  if (!pEntry)
+  if (!location)
     {
       LXW_LOG(LXW_ERROR, "Location: NULL");
 
       return;
     }
 
-  LocationInfo * pLocation = (LocationInfo *)pEntry;
+  LocationInfo * pLocation = (LocationInfo *)location;
 
-  const gchar * pczAlias = (const gchar *)pData;
+  const gchar * pAlias = (const gchar *)alias;
 
-  gsize aliasLength = (pczAlias)?strlen(pczAlias):0;
+  gsize aliaslen = (pAlias)?strlen(pAlias):0;
 
-  if (pLocation->pcAlias_)
+  if (pLocation->alias_)
     {
-      g_free(pLocation->pcAlias_);
+      g_free(pLocation->alias_);
     }
 
-  pLocation->pcAlias_ = g_strndup(pczAlias, aliasLength);
+  pLocation->alias_ = g_strndup(pAlias, aliaslen);
 }
 
 /**
  * Copies a location entry.
  *
- * @param pDestination Address of the pointer to the location to set.
- * @param pSource      Pointer to the location to use/copy.
+ * @param dst Address of the pointer to the location to set.
+ * @param src      Pointer to the location to use/copy.
  *
  * @note Destination is first freed, if non-NULL, otherwise a new allocation
  *       is made. Both source and destination locations must be released by
  *       the caller.
  */
 void
-copyLocation(gpointer * pDestination, gpointer pSource)
+copyLocation(gpointer * dst, gpointer src)
 {
-  if (!pSource || !pDestination)
+  if (!src || !dst)
     {
       return;
     }
 
-  if ((LocationInfo *)*pDestination)
+  if ((LocationInfo *) *dst)
     {
       /* Check if the two are the same, first */
-      LocationInfo * pDstLocation = (LocationInfo *) *pDestination;
+      LocationInfo * pDstLocation = (LocationInfo *) *dst;
 
-      LocationInfo * pSrcLocation = (LocationInfo *)pSource;
+      LocationInfo * pSrcLocation = (LocationInfo *)src;
 
-      if (!strncmp(pDstLocation->pcWOEID_, pSrcLocation->pcWOEID_, strlen(pSrcLocation->pcWOEID_)))
+      if (!strncmp(pDstLocation->woeid_, pSrcLocation->woeid_, strlen(pSrcLocation->woeid_)))
         {
           /* they're the same, no need to copy, just assign alias */
-          setLocationAlias(*pDestination, pSrcLocation->pcAlias_);
+          setLocationAlias(*dst, pSrcLocation->alias_);
           
           return;
         }
 
-      freeLocation(*pDestination);
+      freeLocation(*dst);
 
-      *pDestination = NULL;
+      *dst = NULL;
     }
 
   /* allocate new */
-  *pDestination = g_try_new0(LocationInfo, 1);
+  *dst = g_try_new0(LocationInfo, 1);
 
-  if (*pDestination)
+  if (*dst)
     {
-      LocationInfo * pDest = (LocationInfo *)*pDestination;
-      LocationInfo * pSrc  = (LocationInfo *)pSource;
+      LocationInfo * pDest = (LocationInfo *) *dst;
+      LocationInfo * pSrc  = (LocationInfo *)src;
 
-      pDest->pcAlias_ = g_strndup(pSrc->pcAlias_, 
-                                  (pSrc->pcAlias_)?strlen(pSrc->pcAlias_):0);
-
-      pDest->pcCity_ = g_strndup(pSrc->pcCity_, 
-                                         (pSrc->pcCity_)?strlen(pSrc->pcCity_):0);
-
-      pDest->pcState_ = g_strndup(pSrc->pcState_, 
-                                          (pSrc->pcState_)?strlen(pSrc->pcState_):0);
-
-      pDest->pcCountry_ = g_strndup(pSrc->pcCountry_, 
-                                          (pSrc->pcCountry_)?strlen(pSrc->pcCountry_):0);
-
-      pDest->pcWOEID_ = g_strndup(pSrc->pcWOEID_, 
-                                          (pSrc->pcWOEID_)?strlen(pSrc->pcWOEID_):0);
-
-      pDest->cUnits_ = (pSrc->cUnits_) ? pSrc->cUnits_ : 'f';
-
-      pDest->uiInterval_ = pSrc->uiInterval_;
-
-      pDest->bEnabled_ = pSrc->bEnabled_;
+      pDest->alias_    = g_strndup(pSrc->alias_,   (pSrc->alias_)?strlen(pSrc->alias_):0);
+      pDest->city_     = g_strndup(pSrc->city_,    (pSrc->city_)?strlen(pSrc->city_):0);
+      pDest->state_    = g_strndup(pSrc->state_,   (pSrc->state_)?strlen(pSrc->state_):0);
+      pDest->country_  = g_strndup(pSrc->country_, (pSrc->country_)?strlen(pSrc->country_):0);
+      pDest->woeid_    = g_strndup(pSrc->woeid_,   (pSrc->woeid_)?strlen(pSrc->woeid_):0);
+      pDest->units_    = (pSrc->units_) ? pSrc->units_ : 'f';
+      pDest->interval_ = pSrc->interval_;
+      pDest->enabled_  = pSrc->enabled_;
     }
   
 }

@@ -22,30 +22,30 @@
 
 #include "httputil.h"
 
+#include <string.h>
+
 #include <libxml/nanohttp.h>
 #include <libxml/xmlmemory.h>
-
-#include <string.h>
 
 #define READ_BUFSZ 1024
 
 /**
  * Cleans up the nano HTTP state
  *
- * @param pContext HTTP Context
- * @param pContentType Content-type container
+ * @param ctxt        HTTP Context
+ * @param contenttype Content-type container
  */
 static void
-cleanup(void * pContext, char * pContentType)
+cleanup(void * ctxt, char * contenttype)
 {
-  if (pContext)
+  if (ctxt)
     {
-      xmlNanoHTTPClose(pContext);
+      xmlNanoHTTPClose(ctxt);
     }
 
-  if (pContentType)
+  if (contenttype)
     {
-      xmlFree(pContentType);
+      xmlFree(contenttype);
     }
 
   xmlNanoHTTPCleanup();
@@ -54,113 +54,113 @@ cleanup(void * pContext, char * pContentType)
 /**
  * Returns the contents of the requested URL
  *
- * @param pczURL The URL to retrieve.
- * @param piRetCode The return code supplied with the response.
- * @param piDataSize The resulting data length [out].
+ * @param url     The URL to retrieve.
+ * @param rc      The return code supplied with the response.
+ * @param datalen The resulting data length [out].
  *
  * @return A pointer to a null-terminated buffer containing the textual 
  *         representation of the response. Must be freed by the caller.
  */
 gpointer
-getURL(const gchar * pczURL, gint * piRetCode, gint * piDataSize)
+getURL(const gchar * url, gint * rc, gint * datalen)
 {
   /* nanohttp magic */
-  gint iReadSize = 0;
-  gint iCurrSize = 0;
+  gint readlen = 0;
+  gint currlen = 0;
 
-  gpointer pInBuffer = NULL;
-  gpointer pInBufferRef = NULL;
+  gpointer inbuf    = NULL;
+  gpointer inbufRef = NULL;
 
-  gchar cReadBuffer[READ_BUFSZ];
-  bzero(cReadBuffer, READ_BUFSZ);
+  gchar readbuf[READ_BUFSZ];
+  bzero(readbuf, READ_BUFSZ);
 
   xmlNanoHTTPInit();
 
-  char * pContentType = NULL;
-  void * pHTTPContext = NULL;
+  char * contenttype = NULL;
+  void * ctxt        = NULL;
 
-  pHTTPContext = xmlNanoHTTPOpen(pczURL, &pContentType);
+  ctxt = xmlNanoHTTPOpen(url, &contenttype);
 
-  if (!pHTTPContext)
+  if (!ctxt)
     {
       // failure
-      cleanup(pHTTPContext, pContentType);
+      cleanup(ctxt, contenttype);
 
-      *piRetCode = -1;
+      *rc = -1;
 
-      return pInBuffer; // it's NULL
+      return inbuf; // it's NULL
     }
 
-  *piRetCode = xmlNanoHTTPReturnCode(pHTTPContext);
+  *rc = xmlNanoHTTPReturnCode(ctxt);
 
-  if (*piRetCode != HTTP_STATUS_OK)
+  if (*rc != HTTP_STATUS_OK)
     {
       // failure
-      cleanup(pHTTPContext, pContentType);
+      cleanup(ctxt, contenttype);
 
-      return pInBuffer; // it's NULL
+      return inbuf; // it's NULL
     }
 
-  while ((iReadSize = xmlNanoHTTPRead(pHTTPContext, cReadBuffer, READ_BUFSZ)) > 0)
+  while ((readlen = xmlNanoHTTPRead(ctxt, readbuf, READ_BUFSZ)) > 0)
     {
       // set return code
-      *piRetCode = xmlNanoHTTPReturnCode(pHTTPContext);
+      *rc = xmlNanoHTTPReturnCode(ctxt);
 
       /* Maintain pointer to old location, free on failure */
-      pInBufferRef = pInBuffer;
+      inbufRef = inbuf;
 
-      pInBuffer = g_try_realloc(pInBuffer, iCurrSize + iReadSize);
+      inbuf = g_try_realloc(inbuf, currlen + readlen);
 
-      if (!pInBuffer || *piRetCode != HTTP_STATUS_OK)
+      if (!inbuf || *rc != HTTP_STATUS_OK)
         {
           // failure
-          cleanup(pHTTPContext, pContentType);
+          cleanup(ctxt, contenttype);
 
-          g_free(pInBufferRef);
+          g_free(inbufRef);
 
-          return pInBuffer; // it's NULL
+          return inbuf; // it's NULL
         }
 
-      memcpy(pInBuffer + iCurrSize, cReadBuffer, iReadSize);
+      memcpy(inbuf + currlen, readbuf, readlen);
       
-      iCurrSize += iReadSize;
+      currlen += readlen;
 
       // clear read buffer
-      bzero(cReadBuffer, READ_BUFSZ);
+      bzero(readbuf, READ_BUFSZ);
 
-      *piDataSize = iCurrSize;
+      *datalen = currlen;
     }
 
-  if (iReadSize < 0)
+  if (readlen < 0)
     {
       // error
-      g_free(pInBuffer);
+      g_free(inbuf);
 
-      pInBuffer = NULL;
+      inbuf = NULL;
     }
   else
     {
       /* Maintain pointer to old location, free on failure */
-      pInBufferRef = pInBuffer;
+      inbufRef = inbuf;
 
       // need to add '\0' at the end
-      pInBuffer = g_try_realloc(pInBuffer, iCurrSize + 1);
+      inbuf = g_try_realloc(inbuf, currlen + 1);
 
-      if (!pInBuffer)
+      if (!inbuf)
         {
           // failure
-          g_free(pInBufferRef);
+          g_free(inbufRef);
 
-          pInBuffer = NULL;
+          inbuf = NULL;
         }
       else
         {
-          memcpy(pInBuffer + iCurrSize, "\0", 1);
+          memcpy(inbuf + currlen, "\0", 1);
         }
     }
   
   // finish up
-  cleanup(pHTTPContext, pContentType);
+  cleanup(ctxt, contenttype);
 
-  return pInBuffer;
+  return inbuf;
 }

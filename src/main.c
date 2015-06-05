@@ -25,8 +25,6 @@
 #include "forecast.h"
 #include "weatherwidget.h"
 
-#include <gtk/gtk.h>
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -34,39 +32,41 @@
 #include <getopt.h>
 #include <signal.h>
 
+#include <gtk/gtk.h>
+
 #define APP_NAME "lxweather"
 
 /* signal handler to insure cleanup */
 static void
 sighandler(int signal)
 {
-  char * pcSigName = NULL;
+  char * signame = NULL;
 
   switch (signal)
     {
     case SIGINT:
-      pcSigName = "SIGINT";
+      signame = "SIGINT";
       break;
 
     case SIGKILL:
-      pcSigName = "SIGKILL";
+      signame = "SIGKILL";
       break;
 
     case SIGTERM:
-      pcSigName = "SIGTERM";
+      signame = "SIGTERM";
       break;
 
     case SIGHUP:
-      pcSigName = "SIGHUP";
+      signame = "SIGHUP";
       break;
 
     default:
-      pcSigName = "UNHANDLED";
+      signame = "UNHANDLED";
       break;
     }
 
   fprintf(stderr, "LXWeather: signal caught: %s [%d]\n",
-          pcSigName, signal);
+          signame, signal);
 
   gtk_main_quit();
 }
@@ -84,8 +84,8 @@ static struct option longOptions[] =
 /* Wrapper around the weather widget/status icon pair */
 typedef struct
 {
-  GtkWeather    * pWeatherWidget_;
-  GtkStatusIcon * pStatusIcon_;
+  GtkWeather    * widget_;
+  GtkStatusIcon * icon_;
 } WeatherWidgetEntry;
 
 /* List with WeatherWidgetEntry entries */
@@ -131,11 +131,11 @@ location_changed(GtkWeather * weather, gpointer location, gpointer data)
   WeatherWidgetEntry * pEntry = (WeatherWidgetEntry *)data; //entry_find(weather);
 
   LXW_LOG(LXW_DEBUG, "main::location_changed: %p, %p, %p, %p", 
-          location, pEntry, (pEntry)?pEntry->pWeatherWidget_:NULL, data);
+          location, pEntry, (pEntry)?pEntry->widget_:NULL, data);
 
   if (pEntry)
     {
-      gtk_status_icon_set_from_stock(pEntry->pStatusIcon_, GTK_STOCK_DIALOG_WARNING);
+      gtk_status_icon_set_from_stock(pEntry->icon_, GTK_STOCK_DIALOG_WARNING);
     }
 
 }
@@ -153,20 +153,20 @@ forecast_changed(GtkWeather * weather, gpointer forecast, gpointer data)
   WeatherWidgetEntry * pEntry = (WeatherWidgetEntry *)data; //entry_find(weather);
 
   LXW_LOG(LXW_DEBUG, "main::forecast_changed: %p, %p, %p", 
-          forecast, pEntry, (pEntry)?pEntry->pWeatherWidget_:NULL);
+          forecast, pEntry, (pEntry)?pEntry->widget_:NULL);
   
   if (pEntry)
     {
       if (forecast)
         {
           LXW_LOG(LXW_ERROR, "Setting status icon.");
-          gtk_status_icon_set_from_pixbuf(pEntry->pStatusIcon_,
-                                          ((ForecastInfo *)forecast)->pImage_);
+          gtk_status_icon_set_from_pixbuf(pEntry->icon_,
+                                          ((ForecastInfo *)forecast)->image_);
         }
       else
         {
           LXW_LOG(LXW_ERROR, "Setting status icon STOCK.");
-          gtk_status_icon_set_from_stock(pEntry->pStatusIcon_,
+          gtk_status_icon_set_from_stock(pEntry->icon_,
                                          GTK_STOCK_DIALOG_WARNING);
         }
 
@@ -174,13 +174,13 @@ forecast_changed(GtkWeather * weather, gpointer forecast, gpointer data)
       gchar * tooltip_text = gtk_weather_get_tooltip_text(GTK_WIDGET(weather));
 
       LXW_LOG(LXW_ERROR, "Setting status tooltip.");
-      gtk_status_icon_set_tooltip_text(pEntry->pStatusIcon_, tooltip_text);
+      gtk_status_icon_set_tooltip_text(pEntry->icon_, tooltip_text);
 
       LXW_LOG(LXW_ERROR, "Setting icon visible %d, %d.", 
-              gtk_status_icon_get_visible(pEntry->pStatusIcon_),
-              gtk_status_icon_is_embedded(pEntry->pStatusIcon_));
+              gtk_status_icon_get_visible(pEntry->icon_),
+              gtk_status_icon_is_embedded(pEntry->icon_));
 
-      //gtk_status_icon_set_visible(pEntry->pStatusIcon_, TRUE);
+      //gtk_status_icon_set_visible(pEntry->icon_, TRUE);
 
       LXW_LOG(LXW_ERROR, "free tooltip.");
       g_free(tooltip_text);
@@ -199,7 +199,7 @@ static void
 icon_activate(GtkStatusIcon * icon, gpointer data)
 {
   /* To avoid compiler warning */
-  (void)icon;
+  (void) icon;
 
   LXW_LOG(LXW_DEBUG, "-- ICON::ACTIVATE\n");
 
@@ -269,8 +269,8 @@ entry_new()
                        G_CALLBACK(icon_popup_menu),
                        (gpointer)pWeather);
 
-      pEntry->pWeatherWidget_ = GTK_WEATHER(pWeather);
-      pEntry->pStatusIcon_ = pStatusIcon;
+      pEntry->widget_ = GTK_WEATHER(pWeather);
+      pEntry->icon_   = pStatusIcon;
     }
 
   return pEntry;
@@ -279,21 +279,21 @@ entry_new()
 /**
  * Frees the passed-in entry.
  *
- * @param pEntry Pointer to the entry to free
+ * @param entry Pointer to the entry to free
  */
 static void
-entry_free(gpointer pEntry)
+entry_free(gpointer entry)
 {
-  if (pEntry)
+  if (entry)
     {
-      WeatherWidgetEntry * pData = (WeatherWidgetEntry *)pEntry;
+      WeatherWidgetEntry * pObj = (WeatherWidgetEntry *)entry;
 
       LXW_LOG(LXW_DEBUG, "Destroying weather widget.");
 
-      g_object_unref(pData->pWeatherWidget_);
-      g_object_unref(pData->pStatusIcon_);
+      g_object_unref(pObj->widget_);
+      g_object_unref(pObj->icon_);
       
-      g_free(pEntry);
+      g_free(entry);
     }
 }
 
@@ -316,7 +316,7 @@ entry_find(const GtkWeather * pWeather)
     {
       WeatherWidgetEntry * pEntry = (WeatherWidgetEntry *) iter->data;
 
-      if (pEntry && pEntry->pWeatherWidget_ == pWeather)
+      if (pEntry && pEntry->widget_ == pWeather)
         {
           pRetVal = pEntry;
 
@@ -437,7 +437,7 @@ main(int argc, char **argv)
 
               g_value_set_pointer(&location, pInfo);
               
-              g_object_set_property(G_OBJECT(pEntry->pWeatherWidget_),
+              g_object_set_property(G_OBJECT(pEntry->widget_),
                                     "location",
                                     &location);
             }
@@ -454,7 +454,7 @@ main(int argc, char **argv)
         {
           pWidgetEntryList = g_list_append(pWidgetEntryList, pEntry);
 
-          forecast_changed(GTK_WEATHER(pEntry->pWeatherWidget_), NULL, pEntry);
+          forecast_changed(GTK_WEATHER(pEntry->widget_), NULL, pEntry);
         }
     }
 
@@ -481,7 +481,7 @@ main(int argc, char **argv)
       GValue location = G_VALUE_INIT;
       g_value_init(&location, G_TYPE_POINTER);
 
-      g_object_get_property(G_OBJECT(pEntry->pWeatherWidget_),
+      g_object_get_property(G_OBJECT(pEntry->widget_),
                         "location",
                         &location);
 

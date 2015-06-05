@@ -33,14 +33,14 @@
 /* LocationInfo struct definition */
 typedef struct 
 {
-  gchar * pcAlias_;
-  gchar * pcCity_;
-  gchar * pcState_;
-  gchar * pcCountry_;
-  gchar * pcWOEID_;
-  gchar cUnits_;
-  guint uiInterval_;
-  gboolean bEnabled_;
+  gchar *  alias_;
+  gchar *  city_;
+  gchar *  state_;
+  gchar *  country_;
+  gchar *  woeid_;
+  gchar    units_;
+  guint    interval_;
+  gboolean enabled_;
 } LocationInfo;
 
 /* Configuration helpers */
@@ -64,42 +64,42 @@ extern const gchar * LocationInfoFieldNames[];
  * Provides the mechanism to free any data associated with 
  * the LocationInfo structure
  *
- * @param pData Entry to free.
+ * @param location Location entry to free.
  *
  */
 void
-freeLocation(gpointer pData);
+freeLocation(gpointer location);
 
 /**
  * Prints the contents of the supplied entry to stdout
  *
- * @param pEntry Entry contents of which to print.
+ * @param locatrion Location entry contents of which to print.
  *
  */
 void
-printLocation(gpointer pEntry);
+printLocation(gpointer location);
 
 /**
  * Sets the alias for the location
  *
- * @param pEntry Pointer to the location to modify
- * @param pData Alias value to use
+ * @param location Pointer to the location to modify
+ * @param alias    Alias value to use
  *
  */
 void
-setLocationAlias(gpointer pEntry, gpointer pData);
+setLocationAlias(gpointer location, gpointer alias);
 
 /**
  * Copies a location entry.
  *
- * @param pDestination Address of the pointer to the location to set.
- * @param pSource      Pointer to the location to use/copy.
+ * @param dst Address of the pointer to the location to set.
+ * @param src Pointer to the location to use/copy.
  *
  * @note Destination is first freed, if non-NULL, otherwise a new allocation
  *       is made. Both source and destination locations must be released by
  *       the caller.
  */
 void
-copyLocation(gpointer * pDestination, gpointer pSource);
+copyLocation(gpointer * dst, gpointer src);
 
 #endif
