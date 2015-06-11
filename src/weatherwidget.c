@@ -73,7 +73,7 @@ struct _PopupMenuData
 
 struct _PreferencesDialogData
 {
-  gboolean shown;
+  gboolean    shown;
   GtkWidget * dialog;
   GtkWidget * location_label;
   GtkWidget * location_button;
@@ -84,25 +84,32 @@ struct _PreferencesDialogData
   GtkWidget * auto_button;
   GtkWidget * auto_spin_button;
 };
+// @TODO: consider the use cases:
+// 1. updating location when forecast is being retrieved
+// 2. updating forecast when location is being changed (does this matter?)
+// 3.
+//   It looks like just a single mutex/cond pair would be sufficient.
+//   Only lock the mutex once the user selects the location to set --
+//   this way, once set, unlock the mutex and signal the condition variable.
 
 struct _LocationThreadData
 {
-  pthread_t      * tid;
+  pthread_t      * tid; // @TODO: remember to not make this a pointer
   gchar          * location;
   GtkProgressBar * progress_bar;
   GtkWidget      * progress_dialog;
+  volatile gint    active;
 };
 
 struct _ForecastThreadData
 {
-  gint timerid;
+  pthread_t       thread;
+  gint            timerid;
+  volatile gint   active;    // 1 = should run, 0 = should stop
 };
 
 struct _GtkWeatherPrivate
 {
-  /* Whether or not this widget is being used by itself */
-  gboolean standalone;
-
   /* Main Widget Box layout */
   GtkWidget * hbox;
   GtkWidget * image;
@@ -116,6 +123,10 @@ struct _GtkWeatherPrivate
   gpointer    previous_location;
   gpointer    location;
   gpointer    forecast;
+
+  /* To protect internal state */
+  pthread_mutex_t mutex;
+  pthread_cond_t  cond;
 
   /* Data for location and forecast retrieval threads */
   LocationThreadData location_data;
@@ -165,6 +176,11 @@ static void gtk_weather_set_window_icon              (GtkWindow * window, gchar 
 static void gtk_weather_show_location_progress_bar   (GtkWeather * weather);
 static void gtk_weather_show_location_list           (GtkWeather * weather, GList * list);
 static void gtk_weather_update_preferences_dialog    (GtkWeather * weather);
+
+static gint gtk_weather_cond_signal           (GtkWeather * weather);
+static gint gtk_weather_forecast_thread_start (GtkWeather *weather);
+static gint gtk_weather_forecast_thread_stop  (GtkWeather *weather);
+static void * gtk_weather_get_forecast_threadfunc (void * arg);
 
 static void gtk_weather_get_forecast (GtkWidget * widget);
 
@@ -227,21 +243,13 @@ gtk_weather_get_type(void)
 /**
  * Returns a new instance of this widget.
  *
- * @param standalone Whether or not this widget is being created from an 
- *                   application/plugin (FALSE) or if this widget IS the
- *                   application (TRUE). 
- *
  * @return A new instance of this widget type.
  */
 GtkWidget *
-gtk_weather_new(gboolean standalone)
+gtk_weather_new()
 {
   GObject * object = g_object_new(gtk_weather_get_type(), NULL);
-
-  GtkWeatherPrivate * priv = GTK_WEATHER_GET_PRIVATE(GTK_WEATHER(object));
-
-  priv->standalone = standalone;
-
+  
   return GTK_WIDGET(object);
 }
 
@@ -279,28 +287,29 @@ gtk_weather_class_init(GtkWeatherClass * klass)
                                                        "Current conditions and forecast",
                                                        G_PARAM_READWRITE));
 
-  gtk_weather_signals[LOCATION_CHANGED_SIGNAL] = g_signal_new("location-changed",
-                                                              G_TYPE_FROM_CLASS(klass),
-                                                              G_SIGNAL_RUN_FIRST | G_SIGNAL_ACTION,
-                                                              G_STRUCT_OFFSET(GtkWeatherClass, location_changed),
-                                                              NULL,
-                                                              NULL,
-                                                              g_cclosure_marshal_VOID__POINTER,
-                                                              G_TYPE_NONE,
-                                                              1,
-                                                              G_TYPE_POINTER);
+  gtk_weather_signals[LOCATION_CHANGED_SIGNAL] =
+    g_signal_new("location-changed",
+                 G_TYPE_FROM_CLASS(klass),
+                 G_SIGNAL_RUN_FIRST | G_SIGNAL_ACTION,
+                 G_STRUCT_OFFSET(GtkWeatherClass, location_changed),
+                 NULL,
+                 NULL,
+                 g_cclosure_marshal_VOID__POINTER,
+                 G_TYPE_NONE,
+                 1,
+                 G_TYPE_POINTER);
 
-  gtk_weather_signals[FORECAST_CHANGED_SIGNAL] = g_signal_new("forecast-changed",
-                                                              G_TYPE_FROM_CLASS(klass),
-                                                              G_SIGNAL_RUN_FIRST | G_SIGNAL_ACTION,
-                                                              G_STRUCT_OFFSET(GtkWeatherClass, forecast_changed),
-                                                              NULL,
-                                                              NULL,
-                                                              g_cclosure_marshal_VOID__POINTER,
-                                                              G_TYPE_NONE,
-                                                              1,
-                                                              G_TYPE_POINTER);
- 
+  gtk_weather_signals[FORECAST_CHANGED_SIGNAL] =
+    g_signal_new("forecast-changed",
+                 G_TYPE_FROM_CLASS(klass),
+                 G_SIGNAL_RUN_FIRST | G_SIGNAL_ACTION,
+                 G_STRUCT_OFFSET(GtkWeatherClass, forecast_changed),
+                 NULL,
+                 NULL,
+                 g_cclosure_marshal_VOID__POINTER,
+                 G_TYPE_NONE,
+                 1,
+                 G_TYPE_POINTER);
 }
 
 /**
@@ -315,10 +324,27 @@ gtk_weather_init(GtkWeather * weather)
 
   GtkWeatherPrivate * priv = GTK_WEATHER_GET_PRIVATE(weather);
 
+  /* Initialize thread/sync primitives */
+   LocationThreadData * ltdata = &(priv->location_data);
+   ForecastThreadData * ftdata = &(priv->forecast_data);
+
+  ltdata->active = 0;
+  
+  ftdata->timerid = 0;
+  ftdata->active  = 0;
+      
+  if (pthread_mutex_init(&(priv->mutex), NULL) ||
+      (pthread_cond_init(&(priv->cond), NULL)))
+    {
+      LOG_ERRNO(errno,
+                "gtk_weather_new(): could not initialize threading primitives.");
+    }
+
   /* Box layout internals */
   priv->hbox = gtk_hbox_new(FALSE, 1);
 
-  priv->image = gtk_image_new_from_stock(GTK_STOCK_DIALOG_ERROR, GTK_ICON_SIZE_BUTTON);
+  priv->image = gtk_image_new_from_stock(GTK_STOCK_DIALOG_ERROR,
+                                         GTK_ICON_SIZE_BUTTON);
 
   priv->label = gtk_label_new(GTK_WEATHER_NOT_AVAILABLE_LABEL);
 
@@ -341,8 +367,6 @@ gtk_weather_init(GtkWeather * weather)
   /* Popup menu */
   gtk_weather_create_popup_menu(weather);
 
-  priv->forecast_data.timerid = 0;
-
   /* Adjust size of label and icon inside */
   gtk_weather_render(weather);
 }
@@ -364,10 +388,9 @@ gtk_weather_destroy(GObject * object)
 
   GtkWeatherPrivate * priv = GTK_WEATHER_GET_PRIVATE(weather);
 
-  if (priv->forecast_data.timerid > 0)
-    {
-      g_source_remove(priv->forecast_data.timerid);
-    }
+  if (gtk_weather_forecast_thread_stop(weather)) {
+    LXW_LOG(LXW_DEBUG, "Could not stop forecast thread.");
+  }
   
   /* Need to free location and forecast. */
   freeLocation(priv->previous_location);
@@ -393,7 +416,7 @@ gtk_weather_destroy(GObject * object)
     {
       gtk_widget_destroy(priv->label);
     }
-  
+
 }
 
 /**
@@ -474,7 +497,6 @@ gtk_weather_render(GtkWeather * weather)
  
   if (priv->location && priv->forecast)
     {
-      /*LocationInfo * location = (LocationInfo *)priv->location;*/
       ForecastInfo * forecast = (ForecastInfo *)priv->forecast;
 
       GtkRequisition req;
@@ -498,7 +520,6 @@ gtk_weather_render(GtkWeather * weather)
             {
               g_object_unref(forecast_pixbuf);
             }
-
         }
 
       /* update the label with proper temperature */
@@ -572,6 +593,7 @@ gtk_weather_set_property(GObject * object,
       copyLocation(&priv->previous_location, priv->location);
 
       /* The function starts timer if enabled, otherwise runs a single call. */
+      // @TODO: this should signal a conditional variable, not get the forecast
       gtk_weather_get_forecast(GTK_WIDGET(weather));
 
       break;
@@ -712,21 +734,12 @@ gtk_weather_button_pressed(GtkWidget * widget, GdkEventButton * event)
   LXW_LOG(LXW_DEBUG, "GtkWeather::button_pressed(): Button: %d, type: %d", 
           event->button, event->type);
 
-  GtkWeatherPrivate * priv = GTK_WEATHER_GET_PRIVATE(GTK_WEATHER(widget));
-
   /* If right-clicked, show popup */
   if (event->button == 3 && (event->type == GDK_BUTTON_PRESS))
     {
-      if (priv->standalone)
-        {
-          gtk_weather_run_popup_menu(widget);
+      gtk_weather_run_popup_menu(widget);
 
-          return TRUE;
-        }
-      else
-        {
-          return FALSE;
-        }
+      return TRUE;
     }
   else if (event->button == 1 && (event->type == GDK_BUTTON_PRESS))
     {
@@ -748,7 +761,7 @@ gtk_weather_auto_update_toggled(GtkWidget * widget)
 
   GtkWeatherPrivate * priv = GTK_WEATHER_GET_PRIVATE(GTK_WEATHER(widget));
 
-  LocationInfo * location = (LocationInfo *)priv->location;
+  LocationInfo * location = (LocationInfo *) priv->location;
 
   if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(priv->preferences_data.auto_button)) &&
       priv->location)
@@ -1178,16 +1191,8 @@ gtk_weather_run_popup_menu(GtkWidget * widget)
 {
   GtkWeatherPrivate * priv = GTK_WEATHER_GET_PRIVATE(GTK_WEATHER(widget));
 
-  LXW_LOG(LXW_DEBUG, "GtkWeather::popup_menu(%d)", priv->standalone);
-  // @TODO: remove 'standalone' this app is standalone, period.
-  if (priv->standalone)
-    {
-      gtk_widget_show(GTK_WIDGET(priv->menu_data.quit_item));
-    }
-  else
-    {
-      gtk_widget_hide(GTK_WIDGET(priv->menu_data.quit_item));
-    }
+  LXW_LOG(LXW_DEBUG, "GtkWeather::popup_menu()");
+  gtk_widget_show(GTK_WIDGET(priv->menu_data.quit_item));
 
   /* grey-out refresh, if no location is set */
   if (!priv->location)
@@ -1203,7 +1208,6 @@ gtk_weather_run_popup_menu(GtkWidget * widget)
                  NULL, NULL, NULL, NULL, 
                  3, // right-click
                  gtk_get_current_event_time());
-  
 }
 
 /**
@@ -2276,6 +2280,170 @@ gtk_weather_set_window_icon(GtkWindow * window, gchar * icon_id)
 }
 
 /**
+ * The location retrieval thread function.
+ *
+ * @param arg Pointer to argument data.
+ *
+ * @return Data based on thread completion.
+ */
+static void *
+gtk_weather_get_location_threadfunc(void * arg)
+{
+  gchar * location = (gchar *)arg;
+  
+  GList * list = getLocationInfo(location);
+
+  g_list_foreach(list, setLocationAlias, (gpointer)location);
+
+  return list;  
+}
+
+// ----------- forecast retrieval functions begin here --------
+
+/**
+ * Starts the forecast thread if not already running.  This includes
+ * the thread responsible for actually getting the latest forecast,
+ * as well as the timer thread, if 'enabled' is 1
+ *
+ * @param weather Pointer to the weather instance.
+ *
+ * @return 0 on success, non-zero on failure.
+ */
+static gint
+gtk_weather_forecast_thread_start(GtkWeather * weather)
+{
+  GtkWeatherPrivate * priv = GTK_WEATHER_GET_PRIVATE(weather);
+
+  LocationInfo       * location = (LocationInfo *) priv->location; 
+  LocationThreadData * ltdata   = &(priv->location_data);
+  ForecastThreadData * ftdata   = &(priv->forecast_data);
+
+  int rc = 0;
+
+  if (location && location->enabled_) {
+    if (!ftdata->active) {
+      pthread_attr_t tattr;
+      if (pthread_attr_init(&tattr)) {
+        LOG_ERRNO(errno, "pthread_attr_init()");
+      }
+
+      rc = pthread_create(&(ftdata->thread),
+                          &tattr,
+                          &gtk_weather_get_forecast_threadfunc,
+                          weather);
+
+      if (rc) {
+        LOG_ERRNO(errno, "pthread_create()");
+      }
+    }
+
+    //@TODO: this needs to go into a separate function
+    /* just to be sure... */
+    guint interval_in_seconds = 60 * ((location->interval_) ?
+                                      location->interval_ : 1);
+
+    if (priv->forecast_data.timerid > 0) {
+      g_source_remove(priv->forecast_data.timerid);
+    }
+
+    /* start forecast timer here */
+    priv->forecast_data.timerid = g_timeout_add_seconds(interval_in_seconds,
+                                                        gtk_weather_get_forecast_timerfunc,
+                                                        (gpointer)weather);
+      
+  } else {
+    if (priv->forecast_data.timerid > 0) {
+        {
+          g_source_remove(priv->forecast_data.timerid);
+
+          priv->forecast_data.timerid = 0;
+        }
+    }
+
+  }
+
+  return rc;
+}
+
+/**
+ * Stops the forecast retrieval thread and the corresponding timer thread.
+ *
+ * @param weather Pointer to the weather instance.
+ *
+ * @return 0 on success, non-zero on failure.
+ */
+static gint
+gtk_weather_forecast_thread_stop(GtkWeather * weather)
+{
+  GtkWeatherPrivate * priv = GTK_WEATHER_GET_PRIVATE(weather);
+
+  // @TODO: take the location thread stuff out of here
+  LocationThreadData * ltdata = &(priv->location_data);
+  ForecastThreadData * ftdata = &(priv->forecast_data);
+
+  int rc = 0;
+  
+  ltdata->active = 0;
+  ftdata->active = 0;
+
+  // thread timer, first
+  if (ftdata->timerid > 0)
+    {
+      g_source_remove(ftdata->timerid);
+    }
+
+  if (priv->location &&
+      ((LocationInfo *) priv->location)->enabled_)
+    {
+      gtk_weather_cond_signal(weather);
+            
+      rc = pthread_join(ftdata->thread, NULL);
+      if (rc)
+        {
+          if (rc == ETIMEDOUT)
+            {
+              LXW_LOG(LXW_ERROR, "Timed join timed out.");
+            }
+          
+          LXW_LOG(LXW_ERROR, "Could not join thread: %d", errno);
+        }
+    }
+  
+  return rc;
+}
+
+/**
+ * Signals the condition variable associated with a weather widget.
+ * The condition variable causes the forecast retrieval thread to try
+ * and get the latest forecast.
+ *
+ * @param weather Pointer to the weather widget to get forecast for.
+ *
+ * @return 0 on success, appropriate errno on failure
+ */
+static gint
+gtk_weather_cond_signal(GtkWeather * weather)
+{
+  GtkWeatherPrivate * priv = GTK_WEATHER_GET_PRIVATE(weather);
+
+  if (pthread_mutex_lock(&priv->mutex)) {
+    LXW_LOG(LXW_ERROR, "pthread_mutex_lock");
+    return -1;
+  }
+
+  int rc = 0;
+  
+  if (pthread_cond_signal(&priv->cond)) {
+    LXW_LOG(LXW_ERROR, "pthread_cond_signal");
+    rc = -1;
+  }
+
+  pthread_mutex_unlock(&priv->mutex);
+  
+  return rc;
+}
+
+/**
  * Retrieves the forecast. Starts the forecast timer, if enabled in
  * the particular location.
  *
@@ -2325,28 +2493,9 @@ gtk_weather_get_forecast(GtkWidget * widget)
 }
 
 /**
- * The location retrieval thread function.
- *
- * @param arg Pointer to argument data.
- *
- * @return Data based on thread completion.
- */
-static void *
-gtk_weather_get_location_threadfunc(void * arg)
-{
-  gchar * location = (gchar *)arg;
-  
-  GList * list = getLocationInfo(location);
-
-  g_list_foreach(list, setLocationAlias, (gpointer)location);
-
-  return list;  
-}
-
-/**
  * The forecast retrieval timer function.
  *
- * @param data Pointer to user-data (instance of this widget).
+ * @param data Pointer to user-data (GtkWeather instance).
  *
  * @return TRUE if the timer should be restarted, FALSE otherwise.
  */
@@ -2364,11 +2513,30 @@ gtk_weather_get_forecast_timerfunc(gpointer data)
       return FALSE;
     }
 
-  LocationInfo * location = (LocationInfo *)priv->location;
+  LocationInfo * location = (LocationInfo *) priv->location;
 
   getForecastInfo(location->woeid_, location->units_, &priv->forecast);
 
   gtk_weather_set_forecast(GTK_WEATHER(data), priv->forecast);
 
   return location->enabled_;
+}
+
+/**
+ * The forecast retrieval thread function.
+ *
+ * @param arg Pointer to argument data.
+ *
+ * @return Data based on thread completion.
+ */
+static void *
+gtk_weather_get_forecast_threadfunc(void * arg)
+{
+  /* gchar * location = (gchar *)arg; */
+  
+  /* GList * list = getLocationInfo(location); */
+
+  /* g_list_foreach(list, setLocationAlias, (gpointer)location); */
+
+  return NULL;
 }

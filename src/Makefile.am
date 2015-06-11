@@ -11,11 +11,15 @@ lxweather_SOURCES= \
  weatherwidget.c 
 
 lxweather_CPPFLAGS=     \
- $(DEPENDENCIES_CFLAGS)
+ $(DEPENDENCIES_CFLAGS) \
+ -pthread
+
+lxweather_LDFLAGS=    \
+ $(DEPENDENCIES_LIBS) \
+ -pthread
 
 lxweather_LDADD=      \
- $(DEPENDENCIES_LIBS) \
- -lpthread
+ $(DEPENDENCIES_LIBS)
 
 EXTRA_DIST =         \
  logutil.h           \

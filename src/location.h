@@ -40,7 +40,7 @@ typedef struct
   gchar *  woeid_;
   gchar    units_;
   guint    interval_;
-  gboolean enabled_;
+  gboolean enabled_;  // whether the forecast should be retrieved automagically
 } LocationInfo;
 
 /* Configuration helpers */
