@@ -29,6 +29,8 @@
 
 #define READ_BUFSZ 1024
 
+//@TODO: this module may need a static mutex to protect the library.
+
 /**
  * Cleans up the nano HTTP state
  *
@@ -38,15 +40,13 @@
 static void
 cleanup(void * ctxt, char * contenttype)
 {
-  if (ctxt)
-    {
-      xmlNanoHTTPClose(ctxt);
-    }
+  if (ctxt) {
+    xmlNanoHTTPClose(ctxt);
+  }
 
-  if (contenttype)
-    {
-      xmlFree(contenttype);
-    }
+  if (contenttype) {
+    xmlFree(contenttype);
+  }
 
   xmlNanoHTTPCleanup();
 }
@@ -62,104 +62,87 @@ cleanup(void * ctxt, char * contenttype)
  *         representation of the response. Must be freed by the caller.
  */
 gpointer
-getURL(const gchar * url, gint * rc, gint * datalen)
+httputil_url_get(const gchar * url, gint * rc, gint * datalen)
 {
   /* nanohttp magic */
   gint readlen = 0;
   gint currlen = 0;
 
   gpointer inbuf    = NULL;
-  gpointer inbufRef = NULL;
+  gpointer inbufref = NULL;
 
   gchar readbuf[READ_BUFSZ];
-  bzero(readbuf, READ_BUFSZ);
+  memset(readbuf, READ_BUFSZ, 0);
 
   xmlNanoHTTPInit();
 
   char * contenttype = NULL;
   void * ctxt        = NULL;
-
+  
   ctxt = xmlNanoHTTPOpen(url, &contenttype);
 
-  if (!ctxt)
-    {
-      // failure
-      cleanup(ctxt, contenttype);
+  if (!ctxt) {
+    cleanup(ctxt, contenttype);
 
-      *rc = -1;
+    *rc = -1;
 
-      return inbuf; // it's NULL
-    }
+    return inbuf; // it's NULL
+  }
 
   *rc = xmlNanoHTTPReturnCode(ctxt);
 
-  if (*rc != HTTP_STATUS_OK)
-    {
-      // failure
+  if (*rc != HTTP_STATUS_OK) {
+    cleanup(ctxt, contenttype);
+
+    return inbuf; // it's NULL
+  }
+  
+  while ((readlen = xmlNanoHTTPRead(ctxt, readbuf, READ_BUFSZ)) > 0) {
+    *rc = xmlNanoHTTPReturnCode(ctxt);
+
+    /* Maintain pointer to old location, free on failure */
+    inbufref = inbuf;
+
+    inbuf = g_try_realloc(inbuf, currlen + readlen);
+
+    if (!inbuf || *rc != HTTP_STATUS_OK) {
       cleanup(ctxt, contenttype);
+
+      g_free(inbufref);
 
       return inbuf; // it's NULL
     }
 
-  while ((readlen = xmlNanoHTTPRead(ctxt, readbuf, READ_BUFSZ)) > 0)
-    {
-      // set return code
-      *rc = xmlNanoHTTPReturnCode(ctxt);
-
-      /* Maintain pointer to old location, free on failure */
-      inbufRef = inbuf;
-
-      inbuf = g_try_realloc(inbuf, currlen + readlen);
-
-      if (!inbuf || *rc != HTTP_STATUS_OK)
-        {
-          // failure
-          cleanup(ctxt, contenttype);
-
-          g_free(inbufRef);
-
-          return inbuf; // it's NULL
-        }
-
-      memcpy(inbuf + currlen, readbuf, readlen);
+    memcpy(inbuf + currlen, readbuf, readlen);
       
-      currlen += readlen;
+    currlen += readlen;
 
-      // clear read buffer
-      bzero(readbuf, READ_BUFSZ);
+    memset(readbuf, READ_BUFSZ, 0);
 
-      *datalen = currlen;
-    }
+    *datalen = currlen;
+  }
 
-  if (readlen < 0)
-    {
-      // error
-      g_free(inbuf);
+  if (readlen < 0) {
+    g_free(inbuf);
+
+    inbuf = NULL;
+  } else {
+    /* Maintain pointer to old location, free on failure */
+    inbufref = inbuf;
+
+    /* Need to add '\0' at the end since we're going to treat this buffer
+     * as a char buffer */
+    inbuf = g_try_realloc(inbuf, currlen + 1);
+
+    if (!inbuf) {
+      g_free(inbufref);
 
       inbuf = NULL;
+    } else {
+      memcpy(inbuf + currlen, "\0", 1);
     }
-  else
-    {
-      /* Maintain pointer to old location, free on failure */
-      inbufRef = inbuf;
-
-      // need to add '\0' at the end
-      inbuf = g_try_realloc(inbuf, currlen + 1);
-
-      if (!inbuf)
-        {
-          // failure
-          g_free(inbufRef);
-
-          inbuf = NULL;
-        }
-      else
-        {
-          memcpy(inbuf + currlen, "\0", 1);
-        }
-    }
+  }
   
-  // finish up
   cleanup(ctxt, contenttype);
 
   return inbuf;

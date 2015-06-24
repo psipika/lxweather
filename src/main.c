@@ -340,64 +340,60 @@ main(int argc, char **argv)
   gchar * logfile  = NULL;
   gint    loglevel = LXW_NONE;
   
-  while ((rc = getopt_long(argc, argv, "c:hf:l:", longopts, &optindx)) != -1)
-    {
-      switch (rc)
-        {
-        case 1:
-        case 'h':
-          usage(argv[0]);
+  while ((rc = getopt_long(argc, argv, "c:hf:l:", longopts, &optindx)) != -1) {
+    switch (rc) {
+    case 1:
+    case 'h':
+      usage(argv[0]);
 
-          exit(0);
+      exit(0);
 
-        case 2:
-        case 'c':
-          config = g_strndup(optarg, strlen(optarg));
-          break;
+    case 2:
+    case 'c':
+      config = g_strndup(optarg, strlen(optarg));
+      break;
 
 
-        case 3:
-        case 'f':
-          logfile = g_strndup(optarg, strlen(optarg));
-          break;
+    case 3:
+    case 'f':
+      logfile = g_strndup(optarg, strlen(optarg));
+      break;
           
-        case 4:
-        case 'l':
-          loglevel = (int)strtol(optarg, NULL, 10);
+    case 4:
+    case 'l':
+      loglevel = (int)strtol(optarg, NULL, 10);
 
-          if (loglevel < LXW_NONE || loglevel > LXW_ALL)
-            {
-              loglevel = LXW_NONE;
-            }
+      if (loglevel < LXW_NONE || loglevel > LXW_ALL) {
+        loglevel = LXW_NONE;
+      }
 
-          break;
+      break;
 
-        default:
-          /* Unhandled */
-          usage(argv[0]);
+    default:
+      /* Unhandled */
+      usage(argv[0]);
 
-          exit(1);
+      exit(1);
 
-          break;
-        }
+      break;
     }
+  }
 
-  initializeLogUtil(logfile);
+  logutil_init(logfile);
 
-  setMaxLogLevel(loglevel);
+  logutil_max_loglevel_set(loglevel);
 
   g_free(logfile);
 
   LXW_LOG(LXW_DEBUG, "Configuration option: %s", config);
 
-  if (!config)
-    {
-      config = g_strdup_printf("%s%s%s%sconfig", 
-                               g_get_user_config_dir(),
-                               G_DIR_SEPARATOR_S,
-                               APP_NAME,
-                               G_DIR_SEPARATOR_S);
-    }
+  if (!config) {
+    config = g_strdup_printf("%s%s%s%sconfig", 
+                             g_get_user_config_dir(),
+                             G_DIR_SEPARATOR_S,
+                             APP_NAME,
+                             G_DIR_SEPARATOR_S);
+  }
 
   LXW_LOG(LXW_DEBUG, "Effective configuration: %s", config);
 
@@ -409,58 +405,52 @@ main(int argc, char **argv)
   gtk_init(&argc, &argv);
 
   /* do some magic here */
-  initializeYahooUtil();
+  yahooutil_init();
 
-  GList * list = getLocationsFromConfiguration(config);
+  GList * list = fileutil_config_locations_load(config);
 
   LXW_LOG(LXW_DEBUG, "Size of configured list: %u", g_list_length(list));
 
   /* Initialize entry one per configured location*/
-  if (g_list_length(list))
-    {
-      GList * iter = g_list_first(list);
+  if (g_list_length(list)) {
+    GList * iter = g_list_first(list);
 
-      while (iter)
-        {
-          /* Create entry */
-          WeatherWidgetEntry * entry = entry_new();
-
-          if (entry)
-            {
-              g_widgetentrylist = g_list_append(g_widgetentrylist, entry);
-
-              /* set location based on config file entry */
-              GValue location = G_VALUE_INIT;
-              g_value_init(&location, G_TYPE_POINTER);
-              
-              LocationInfo * info = iter->data;
-
-              g_value_set_pointer(&location, info);
-              
-              g_object_set_property(G_OBJECT(entry->widget_),
-                                    "location",
-                                    &location);
-            }
-
-          iter = g_list_next(iter);
-        }
-    }
-  else
-    {
-      /* No entries means no location and no forecast */
+    while (iter) {
+      /* Create entry */
       WeatherWidgetEntry * entry = entry_new();
 
-      if (entry)
-        {
-          g_widgetentrylist = g_list_append(g_widgetentrylist, entry);
+      if (entry) {
+        g_widgetentrylist = g_list_append(g_widgetentrylist, entry);
 
-          /* this call will update the status icon accordingly */
-          forecast_changed(GTK_WEATHER(entry->widget_), NULL, entry);
-        }
+        /* set location based on config file entry */
+        GValue location = G_VALUE_INIT;
+        g_value_init(&location, G_TYPE_POINTER);
+              
+        LocationInfo * info = iter->data;
+
+        g_value_set_pointer(&location, info);
+              
+        g_object_set_property(G_OBJECT(entry->widget_),
+                              "location",
+                              &location);
+      }
+
+      iter = g_list_next(iter);
     }
+  } else {
+    /* No entries means no location and no forecast */
+    WeatherWidgetEntry * entry = entry_new();
+
+    if (entry) {
+      g_widgetentrylist = g_list_append(g_widgetentrylist, entry);
+
+      /* this call will update the status icon accordingly */
+      forecast_changed(GTK_WEATHER(entry->widget_), NULL, entry);
+    }
+  }
 
   /* Free location list from configuration */
-  g_list_free_full(list, freeLocation);
+  g_list_free_full(list, location_free);
 
   list = NULL;
 
@@ -477,28 +467,26 @@ main(int argc, char **argv)
   /* one entry to save per widget's location */
   GList * iter = g_list_first(g_widgetentrylist);
 
-  while (iter)
-    {
-      WeatherWidgetEntry * entry = iter->data;
+  while (iter) {
+    WeatherWidgetEntry * entry = iter->data;
 
-      GValue location = G_VALUE_INIT;
-      g_value_init(&location, G_TYPE_POINTER);
+    GValue location = G_VALUE_INIT;
+    g_value_init(&location, G_TYPE_POINTER);
 
-      g_object_get_property(G_OBJECT(entry->widget_),
-                            "location",
-                            &location);
+    g_object_get_property(G_OBJECT(entry->widget_),
+                          "location",
+                          &location);
 
-      list = g_list_prepend(list, g_value_get_pointer(&location));
+    list = g_list_prepend(list, g_value_get_pointer(&location));
 
-      iter = g_list_next(iter);
-    }
+    iter = g_list_next(iter);
+  }
 
   LXW_LOG(LXW_DEBUG, "Length of save list: %d", g_list_length(list));
 
-  if (g_list_length(list))
-    {
-      saveLocationsToConfiguration(list, config);
-    }
+  if (g_list_length(list)) {
+    fileutil_config_locations_save(list, config);
+  }
 
   /* The local list does NOT own the data in each entry, do not free_full */
   g_list_free(list);
@@ -511,11 +499,11 @@ main(int argc, char **argv)
 
   g_free(config);
 
-  cleanupYahooUtil();
+  yahooutil_cleanup();
 
   LXW_LOG(LXW_DEBUG, "Done.");
 
-  cleanupLogUtil();
+  logutil_cleanup();
 
   return EXIT_SUCCESS;
 }

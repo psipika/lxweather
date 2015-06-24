@@ -26,6 +26,14 @@
 #include <stdio.h>
 #include <string.h>
 
+#define RESET_PROP_VALUE(p, v, sz)  \
+  do {                              \
+    if (p) {                        \
+      g_free(p);                    \
+    }                               \
+    p = g_strndup(v, sz);           \
+  } while (0);
+
 const gchar * LocationInfoFieldNames[] = { "alias",
                                            "city",
                                            "state",
@@ -44,20 +52,19 @@ const gchar * LocationInfoFieldNames[] = { "alias",
  *
  */
 void
-freeLocation(gpointer location)
+location_free(gpointer location)
 {
-  if (!location)
-    {
-      return;
-    }
+  if (!location) {
+    return;
+  }
 
-  LocationInfo * pEntry = (LocationInfo *)location;
+  LocationInfo * info = (LocationInfo *)location;
 
-  g_free(pEntry->alias_);
-  g_free(pEntry->city_);
-  g_free(pEntry->state_);
-  g_free(pEntry->country_);
-  g_free(pEntry->woeid_);
+  g_free(info->alias_);
+  g_free(info->city_);
+  g_free(info->state_);
+  g_free(info->country_);
+  g_free(info->woeid_);
 
   g_free(location);
 }
@@ -69,60 +76,65 @@ freeLocation(gpointer location)
  *
  */
 void
-printLocation(gpointer location G_GNUC_UNUSED)
+location_print(gpointer location G_GNUC_UNUSED)
 {
 #ifdef DEBUG
-  if (!location)
-    {
-      LXW_LOG(LXW_ERROR, "location::printLocation(): Entry: NULL");
+  if (!location) {
+    LXW_LOG(LXW_ERROR, "location::printLocation(): Entry: NULL");
       
-      return;
-    }
+    return;
+  }
 
-  LocationInfo * pInfo = (LocationInfo *)location;
+  LocationInfo * info = (LocationInfo *)location;
 
   LXW_LOG(LXW_VERBOSE, "Entry:");
-  LXW_LOG(LXW_VERBOSE, "\tAlias: %s",    (const char *)pInfo->alias_);
-  LXW_LOG(LXW_VERBOSE, "\tCity: %s",     (const char *)pInfo->city_);
-  LXW_LOG(LXW_VERBOSE, "\tState: %s",    (const char *)pInfo->state_);
-  LXW_LOG(LXW_VERBOSE, "\tCountry: %s",  (const char *)pInfo->country_);
-  LXW_LOG(LXW_VERBOSE, "\tWOEID: %s",    (const char *)pInfo->woeid_);
-  LXW_LOG(LXW_VERBOSE, "\tUnits: %c",    pInfo->units_);
-  LXW_LOG(LXW_VERBOSE, "\tInterval: %u", pInfo->interval_);
-  LXW_LOG(LXW_VERBOSE, "\tEnabled: %s",  (pInfo->enabled_)?"yes":"no");
+  LXW_LOG(LXW_VERBOSE, "\tAlias: %s",    (const char *)info->alias_);
+  LXW_LOG(LXW_VERBOSE, "\tCity: %s",     (const char *)info->city_);
+  LXW_LOG(LXW_VERBOSE, "\tState: %s",    (const char *)info->state_);
+  LXW_LOG(LXW_VERBOSE, "\tCountry: %s",  (const char *)info->country_);
+  LXW_LOG(LXW_VERBOSE, "\tWOEID: %s",    (const char *)info->woeid_);
+  LXW_LOG(LXW_VERBOSE, "\tUnits: %c",    (info->units_)?info->units_:'A');
+  LXW_LOG(LXW_VERBOSE, "\tInterval: %u", info->interval_);
+  LXW_LOG(LXW_VERBOSE, "\tEnabled: %s",  (info->enabled_)?"yes":"no");
 #endif
 }
 
 
 /**
- * Sets the alias for the location
+ * Sets the given property for the location
  *
- * @param location Pointer to the location to modify
- * @param alias    Alias value to use
- *
+ * @param location Pointer to the location to modify.
+ * @param property Name of the property to set.
+ * @param value    Value to assign to the property.
+ * @param len      Length of the value to assign to the property (think strlen())
  */
 void
-setLocationAlias(gpointer location, gpointer alias)
+location_property_set(gpointer      location,
+                      const gchar * property,
+                      const gchar * value,
+                      gsize         len)
 {
-  if (!location)
-    {
-      LXW_LOG(LXW_ERROR, "Location: NULL");
+  if (!location) {
+    LXW_LOG(LXW_ERROR, "Location: NULL");
 
-      return;
-    }
+    return;
+  }
 
-  LocationInfo * pLocation = (LocationInfo *)location;
+  LocationInfo * info = (LocationInfo *)location;
 
-  const gchar * pAlias = (const gchar *)alias;
-
-  gsize aliaslen = (pAlias)?strlen(pAlias):0;
-
-  if (pLocation->alias_)
-    {
-      g_free(pLocation->alias_);
-    }
-
-  pLocation->alias_ = g_strndup(pAlias, aliaslen);
+  if (!strcmp(property, "city")) {
+    RESET_PROP_VALUE(info->city_, value, len);
+  } else if (!strcmp(property, "state")) {
+    RESET_PROP_VALUE(info->state_, value, len);
+  } else if (!strcmp(property, "country")) {
+    RESET_PROP_VALUE(info->country_, value, len);
+  } else if (!strcmp(property, "woeid")) {
+    RESET_PROP_VALUE(info->woeid_, value, len);
+  } else if (!strcmp(property, "line2")) {
+    RESET_PROP_VALUE(info->alias_, value, len);
+  } else if (!strcmp(property, "line4")) {
+    RESET_PROP_VALUE(info->country_, value, len);
+  }
 }
 
 /**
@@ -136,49 +148,57 @@ setLocationAlias(gpointer location, gpointer alias)
  *       the caller.
  */
 void
-copyLocation(gpointer * dst, gpointer src)
+location_copy(gpointer * dst, gpointer src)
 {
-  if (!src || !dst)
-    {
+  if (!src || !dst) {
+    return;
+  }
+
+  if ((LocationInfo *) *dst) {
+    /* Check if the two are the same, first */
+    LocationInfo * dstinfo = (LocationInfo *) *dst;
+    LocationInfo * srcinfo = (LocationInfo *) src;
+
+    if (!strncmp(dstinfo->woeid_, srcinfo->woeid_, strlen(srcinfo->woeid_))) {
+      /* they're the same, no need to copy, just assign alias */
+      location_property_set(*dst,
+                            "alias",
+                            srcinfo->alias_,
+                            (srcinfo->alias_) ? strlen(srcinfo->alias_) : 0);
+          
       return;
     }
 
-  if ((LocationInfo *) *dst)
-    {
-      /* Check if the two are the same, first */
-      LocationInfo * pDstLocation = (LocationInfo *) *dst;
+    location_free(*dst);
 
-      LocationInfo * pSrcLocation = (LocationInfo *)src;
-
-      if (!strncmp(pDstLocation->woeid_, pSrcLocation->woeid_, strlen(pSrcLocation->woeid_)))
-        {
-          /* they're the same, no need to copy, just assign alias */
-          setLocationAlias(*dst, pSrcLocation->alias_);
-          
-          return;
-        }
-
-      freeLocation(*dst);
-
-      *dst = NULL;
-    }
+    *dst = NULL;
+  }
 
   /* allocate new */
   *dst = g_try_new0(LocationInfo, 1);
 
-  if (*dst)
-    {
-      LocationInfo * pDest = (LocationInfo *) *dst;
-      LocationInfo * pSrc  = (LocationInfo *)src;
+  if (*dst) {
+    LocationInfo * dstinfo = (LocationInfo *) *dst;
+    LocationInfo * srcinfo  = (LocationInfo *)src;
 
-      pDest->alias_    = g_strndup(pSrc->alias_,   (pSrc->alias_)?strlen(pSrc->alias_):0);
-      pDest->city_     = g_strndup(pSrc->city_,    (pSrc->city_)?strlen(pSrc->city_):0);
-      pDest->state_    = g_strndup(pSrc->state_,   (pSrc->state_)?strlen(pSrc->state_):0);
-      pDest->country_  = g_strndup(pSrc->country_, (pSrc->country_)?strlen(pSrc->country_):0);
-      pDest->woeid_    = g_strndup(pSrc->woeid_,   (pSrc->woeid_)?strlen(pSrc->woeid_):0);
-      pDest->units_    = (pSrc->units_) ? pSrc->units_ : 'f';
-      pDest->interval_ = pSrc->interval_;
-      pDest->enabled_  = pSrc->enabled_;
-    }
+    dstinfo->alias_ = g_strndup(srcinfo->alias_,
+                                (srcinfo->alias_)?strlen(srcinfo->alias_):0);
+    
+    dstinfo->city_ = g_strndup(srcinfo->city_,
+                               (srcinfo->city_)?strlen(srcinfo->city_):0);
+    
+    dstinfo->state_ = g_strndup(srcinfo->state_,
+                                (srcinfo->state_)?strlen(srcinfo->state_):0);
+    
+    dstinfo->country_ = g_strndup(srcinfo->country_,
+                                  (srcinfo->country_)?strlen(srcinfo->country_):0);
+    
+    dstinfo->woeid_ = g_strndup(srcinfo->woeid_,
+                                (srcinfo->woeid_)?strlen(srcinfo->woeid_):0);
+    
+    dstinfo->units_    = (srcinfo->units_) ? srcinfo->units_ : 'f';
+    dstinfo->interval_ = srcinfo->interval_;
+    dstinfo->enabled_  = srcinfo->enabled_;
+  }
   
 }

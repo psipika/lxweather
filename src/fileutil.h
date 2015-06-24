@@ -36,7 +36,7 @@
  * @note The caller must free the returned list.
  */
 GList *
-getLocationsFromConfiguration(const gchar * path);
+fileutil_config_locations_load(const gchar * path);
 
 /**
  * Creates and fills 'Location' sections based on passed-in LocationInfo
@@ -46,7 +46,7 @@ getLocationsFromConfiguration(const gchar * path);
  * @param path Path to the file where to save the locations.
  */
 void
-saveLocationsToConfiguration(GList * list, const gchar * path);
+fileutil_config_locations_save(GList * list, const gchar * path);
 
 
 #endif

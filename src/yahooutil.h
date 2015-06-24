@@ -34,7 +34,7 @@
  *         if no details were found. Caller is responsible for freeing the list.
  */
 GList *
-getLocationInfo(const gchar * location);
+yahooutil_location_find(const gchar * location);
 
 /**
  * Retrieves the forecast for the specified location WOEID
@@ -46,20 +46,23 @@ getLocationInfo(const gchar * location);
  *
  */
 void
-getForecastInfo(const gchar * woeid, const gchar units, gpointer forecast);
+yahooutil_forecast_get(const gchar * woeid, const gchar units, gpointer forecast);
 
 /**
  * Initializes the internals: XML and HTTP
  *
  */
 void
-initializeYahooUtil(void);
+yahooutil_init(void);
 
 /**
  * Cleans up the internals: XML and HTTP
  *
  */
 void
-cleanupYahooUtil(void);
+yahooutil_cleanup(void);
+
+gint
+forecast_response_parse(gpointer response, gpointer * forecast);
 
 #endif
