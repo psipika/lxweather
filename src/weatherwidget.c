@@ -554,7 +554,7 @@ gtk_weather_render(GtkWeather * weather)
     gchar * tooltip_text = gtk_weather_get_tooltip_text(GTK_WIDGET(weather));
 
     pthread_rwlock_unlock(&(priv->rwlock));
-    
+
     gtk_widget_set_tooltip_text(GTK_WIDGET(weather), tooltip_text);
 
     g_free(tooltip_text);
