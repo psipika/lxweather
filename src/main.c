@@ -133,10 +133,9 @@ location_changed(GtkWeather * weather, gpointer location, gpointer data)
   LXW_LOG(LXW_DEBUG, "main::location_changed: %p, %p, %p, %p", 
           location, entry, (entry)?entry->widget_:NULL, data);
 
-  if (entry)
-    {
-      gtk_status_icon_set_from_stock(entry->icon_, GTK_STOCK_DIALOG_WARNING);
-    }
+  if (entry) {
+    gtk_status_icon_set_from_stock(entry->icon_, GTK_STOCK_DIALOG_WARNING);
+  }
 
 }
 
@@ -155,36 +154,32 @@ forecast_changed(GtkWeather * weather, gpointer forecast, gpointer data)
   LXW_LOG(LXW_DEBUG, "main::forecast_changed: %p, %p, %p", 
           forecast, entry, (entry)?entry->widget_:NULL);
   
-  if (entry)
-    {
-      if (forecast)
-        {
-          LXW_LOG(LXW_ERROR, "Setting status icon.");
-          gtk_status_icon_set_from_pixbuf(entry->icon_,
-                                          ((ForecastInfo *)forecast)->image_);
-        }
-      else
-        {
-          LXW_LOG(LXW_ERROR, "Setting status icon STOCK.");
-          gtk_status_icon_set_from_stock(entry->icon_,
-                                         GTK_STOCK_DIALOG_WARNING);
-        }
-
-      LXW_LOG(LXW_ERROR, "Getting status tooltip.");
-      gchar * tooltip_text = gtk_weather_get_tooltip_text(GTK_WIDGET(weather));
-
-      LXW_LOG(LXW_ERROR, "Setting status tooltip.");
-      gtk_status_icon_set_tooltip_text(entry->icon_, tooltip_text);
-
-      LXW_LOG(LXW_ERROR, "Setting icon visible %d, %d.", 
-              gtk_status_icon_get_visible(entry->icon_),
-              gtk_status_icon_is_embedded(entry->icon_));
-
-      //gtk_status_icon_set_visible(entry->icon_, TRUE);
-
-      LXW_LOG(LXW_ERROR, "free tooltip.");
-      g_free(tooltip_text);
+  if (entry) {
+    if (forecast) {
+      LXW_LOG(LXW_ERROR, "Setting status icon.");
+      gtk_status_icon_set_from_pixbuf(entry->icon_,
+                                      ((ForecastInfo *)forecast)->image_);
+    } else {
+      LXW_LOG(LXW_ERROR, "Setting status icon STOCK.");
+      gtk_status_icon_set_from_stock(entry->icon_,
+                                     GTK_STOCK_DIALOG_WARNING);
     }
+
+    LXW_LOG(LXW_ERROR, "Getting status tooltip.");
+    gchar * tooltip_text = gtk_weather_get_tooltip_text(GTK_WIDGET(weather));
+
+    LXW_LOG(LXW_ERROR, "Setting status tooltip.");
+    gtk_status_icon_set_tooltip_text(entry->icon_, tooltip_text);
+
+    LXW_LOG(LXW_ERROR, "Setting icon visible %d, %d.", 
+            gtk_status_icon_get_visible(entry->icon_),
+            gtk_status_icon_is_embedded(entry->icon_));
+
+    //gtk_status_icon_set_visible(entry->icon_, TRUE);
+
+    LXW_LOG(LXW_ERROR, "free tooltip.");
+    g_free(tooltip_text);
+  }
 
   LXW_LOG(LXW_ERROR, "...Done.");  
 }
@@ -239,39 +234,38 @@ entry_new()
 {
   WeatherWidgetEntry * entry = (WeatherWidgetEntry *) g_try_new0(WeatherWidgetEntry, 1);
 
-  if (entry)
-    {
-      GtkWidget * weather = gtk_weather_new();
+  if (entry) {
+    GtkWidget * weather = gtk_weather_new();
 
-      g_object_ref_sink(weather);
+    g_object_ref_sink(weather);
 
-      g_signal_connect(G_OBJECT(weather),
-                       "location-changed",
-                       G_CALLBACK(location_changed),
-                       (gpointer)entry);
+    g_signal_connect(G_OBJECT(weather),
+                     "location-changed",
+                     G_CALLBACK(location_changed),
+                     (gpointer)entry);
       
-      g_signal_connect(G_OBJECT(weather),
-                       "forecast-changed",
-                       G_CALLBACK(forecast_changed),
-                       (gpointer)entry);
+    g_signal_connect(G_OBJECT(weather),
+                     "forecast-changed",
+                     G_CALLBACK(forecast_changed),
+                     (gpointer)entry);
       
-      GtkStatusIcon * icon = gtk_status_icon_new_from_stock(GTK_STOCK_DIALOG_ERROR);
+    GtkStatusIcon * icon = gtk_status_icon_new_from_stock(GTK_STOCK_DIALOG_ERROR);
 
-      g_object_ref_sink(icon);
+    g_object_ref_sink(icon);
 
-      g_signal_connect(G_OBJECT(icon),
-                       "activate",
-                       G_CALLBACK(icon_activate),
-                       (gpointer)weather);
+    g_signal_connect(G_OBJECT(icon),
+                     "activate",
+                     G_CALLBACK(icon_activate),
+                     (gpointer)weather);
       
-      g_signal_connect(G_OBJECT(icon),
-                       "popup-menu",
-                       G_CALLBACK(icon_popup_menu),
-                       (gpointer)weather);
+    g_signal_connect(G_OBJECT(icon),
+                     "popup-menu",
+                     G_CALLBACK(icon_popup_menu),
+                     (gpointer)weather);
 
-      entry->widget_ = GTK_WEATHER(weather);
-      entry->icon_   = icon;
-    }
+    entry->widget_ = GTK_WEATHER(weather);
+    entry->icon_   = icon;
+  }
 
   return entry;
 }
@@ -284,17 +278,16 @@ entry_new()
 static void
 entry_free(gpointer entry)
 {
-  if (entry)
-    {
-      WeatherWidgetEntry * pObj = (WeatherWidgetEntry *)entry;
+  if (entry) {
+    WeatherWidgetEntry * pObj = (WeatherWidgetEntry *)entry;
 
-      LXW_LOG(LXW_DEBUG, "Destroying weather widget.");
+    LXW_LOG(LXW_DEBUG, "Destroying weather widget.");
 
-      g_object_unref(pObj->widget_);
-      g_object_unref(pObj->icon_);
+    g_object_unref(pObj->widget_);
+    g_object_unref(pObj->icon_);
       
-      g_free(entry);
-    }
+    g_free(entry);
+  }
 }
 
 /**
@@ -312,19 +305,17 @@ entry_find(const GtkWeather * weather)
 
   GList * iter = g_list_first(g_widgetentrylist);
 
-  while (iter)
-    {
-      WeatherWidgetEntry * entry = (WeatherWidgetEntry *) iter->data;
+  while (iter) {
+    WeatherWidgetEntry * entry = (WeatherWidgetEntry *) iter->data;
 
-      if (entry && entry->widget_ == weather)
-        {
-          retval = entry;
+    if (entry && entry->widget_ == weather) {
+      retval = entry;
 
-          break;
-        }
-
-      iter = g_list_next(iter);
+      break;
     }
+
+    iter = g_list_next(iter);
+  }
 
   return retval;
 }

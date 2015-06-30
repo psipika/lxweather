@@ -122,7 +122,9 @@ location_property_set(gpointer      location,
 
   LocationInfo * info = (LocationInfo *)location;
 
-  if (!strcmp(property, "city")) {
+  if (!strcmp(property, "alias")) {
+    RESET_PROP_VALUE(info->alias_, value, len);
+  } else if (!strcmp(property, "city")) {
     RESET_PROP_VALUE(info->city_, value, len);
   } else if (!strcmp(property, "state")) {
     RESET_PROP_VALUE(info->state_, value, len);

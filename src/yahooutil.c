@@ -171,8 +171,8 @@ locale_to_ascii(const gchar *instr)
  */
 static gint
 string_if_different_set(gchar ** dststr, 
-                     const gchar * srcstr,
-                     const gsize srclen)
+                        const gchar * srcstr,
+                        const gsize srclen)
 {
   // if diffrent, clear and set
   if (g_strcmp0(*dststr, srcstr)) {

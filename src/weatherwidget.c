@@ -1944,17 +1944,19 @@ gtk_weather_show_location_progress_bar(GtkWeather * weather)
       }
     }
 
+    if (timer) {
+      g_source_remove(timer);
+    }
+
     break;
 
   default:
     break;
   }
-  
-  if (GTK_IS_WIDGET(dialog)) {
+
+  if (dialog && GTK_IS_WIDGET(dialog)) {
     gtk_widget_destroy(dialog);
   }
-
-  g_source_remove(timer);
 
   g_free(progress_str);
 }
@@ -2305,7 +2307,7 @@ gtk_weather_forecast_thread_start(GtkWeather * weather)
 
   int rc = 0;
 
-  if (location && location->enabled_) {
+  if (location) {
     /* if it's not already running */
     if (!ftdata->active) {
       pthread_attr_t tattr;
@@ -2493,6 +2495,7 @@ gtk_weather_get_forecast_threadfunc(void * arg)
     /* write lock */
     LXW_LOG(LXW_DEBUG, "\tabout to writelock");
     if (pthread_rwlock_wrlock(&(priv->rwlock)) == 0) {
+      LXW_LOG(LXW_DEBUG, "\tgetting forecast for %s", location->woeid_);
       yahooutil_forecast_get(location->woeid_,
                              location->units_, 
                              &(priv->forecast));
