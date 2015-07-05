@@ -72,7 +72,7 @@ httputil_url_get(const gchar * url, gint * rc, gint * datalen)
   gpointer inbufref = NULL;
 
   gchar readbuf[READ_BUFSZ];
-  memset(readbuf, READ_BUFSZ, 0);
+  memset(readbuf, 0, READ_BUFSZ);
 
   xmlNanoHTTPInit();
 
@@ -117,7 +117,7 @@ httputil_url_get(const gchar * url, gint * rc, gint * datalen)
       
     currlen += readlen;
 
-    memset(readbuf, READ_BUFSZ, 0);
+    memset(readbuf, 0, READ_BUFSZ);
 
     *datalen = currlen;
   }

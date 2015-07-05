@@ -14,7 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
- * 
+ *
  * See the COPYRIGHT file for more information.
  */
 
@@ -32,7 +32,7 @@
 #include <string.h>
 
 /* Using pthreads instead of glib's due to cancellability and API stability */
-#include <pthread.h> 
+#include <pthread.h>
 
 /* Private structure, property and signal definitions. */
 #define GTK_WEATHER_GET_PRIVATE(obj) (G_TYPE_INSTANCE_GET_PRIVATE ((obj), \
@@ -99,7 +99,7 @@ struct _ConditionsDialogData
   GtkWidget * windchill_text_label;
   GtkWidget * humidity_text_label;
   GtkWidget * pressure_text_label;
-  GtkWidget * visibiliity_text_label;
+  GtkWidget * visibility_text_label;
   GtkWidget * wind_text_label;
   GtkWidget * sunrise_text_label;
   GtkWidget * sunset_text_label;
@@ -172,7 +172,7 @@ enum
   LAST_SIGNAL
 };
 
-enum 
+enum
 {
   PROP_0,
   PROP_LOCATION,
@@ -189,9 +189,9 @@ static void gtk_weather_size_allocate (GtkWidget * widget, GtkAllocation * alloc
 
 static void gtk_weather_destroy       (GObject * object);
 
-static void gtk_weather_set_property (GObject * object, guint prop_id, 
+static void gtk_weather_set_property (GObject * object, guint prop_id,
                                       const GValue * value, GParamSpec * param_spec);
-static void gtk_weather_get_property (GObject * object, guint prop_id, 
+static void gtk_weather_get_property (GObject * object, guint prop_id,
                                       GValue * value, GParamSpec * param_spec);
 
 static void gtk_weather_set_location (GtkWeather * weather, gpointer location, gboolean backup);
@@ -208,9 +208,13 @@ static void gtk_weather_set_window_icon              (GtkWindow * window, gchar 
 static void gtk_weather_show_location_progress_bar   (GtkWeather * weather);
 static void gtk_weather_show_location_list           (GtkWeather * weather, GList * list);
 static void gtk_weather_update_preferences_dialog    (GtkWeather * weather);
+static GtkWidget * gtk_weather_create_preferences_dialog(GtkWidget * widget);
 
-static gint gtk_weather_forecast_thread_start (GtkWeather *weather);
-static gint gtk_weather_forecast_thread_stop  (GtkWeather *weather);
+static void gtk_weather_create_conditions_dialog (GtkWeather * weather);
+static void gtk_weather_update_conditions_dialog (GtkWeather * weather);
+
+static gint gtk_weather_forecast_thread_start (GtkWeather * weather);
+static gint gtk_weather_forecast_thread_stop  (GtkWeather * weather);
 static void * gtk_weather_get_forecast_threadfunc (void * arg);
 
 static void gtk_weather_get_forecast (GtkWidget * widget);
@@ -234,10 +238,10 @@ static gboolean gtk_weather_get_forecast_timerfunc (gpointer data);
 GType
 gtk_weather_get_type(void)
 {
-  /* 
+  /*
    * Normally, the variable below is declared static and initialized to 0.
-   * However, when dealing with lxpanel, the type remains registered, 
-   * while this widget class is removed from scope. 
+   * However, when dealing with lxpanel, the type remains registered,
+   * while this widget class is removed from scope.
    * This means that the variable below goes out of scope, BUT the type
    * remains registered with GTK.
    * Hence, g_type_from_name...
@@ -247,7 +251,7 @@ gtk_weather_get_type(void)
   LXW_LOG(LXW_DEBUG, "GtkWeather::get_type(): %lu", (gulong)gtk_weather_type);
 
   if (!gtk_weather_type) {
-    static const GTypeInfo gtk_weather_info = 
+    static const GTypeInfo gtk_weather_info =
       {
         sizeof(GtkWeatherClass),
         NULL,
@@ -261,7 +265,7 @@ gtk_weather_get_type(void)
         NULL
       };
 
-    gtk_weather_type = g_type_register_static(GTK_TYPE_EVENT_BOX, 
+    gtk_weather_type = g_type_register_static(GTK_TYPE_EVENT_BOX,
                                               GTK_WEATHER_NAME,
                                               &gtk_weather_info,
                                               0);
@@ -608,12 +612,6 @@ gtk_weather_set_property(GObject * object,
 
     /* The function starts the forecast thread if the location is 'enabled' */
     gtk_weather_forecast_thread_start(weather);
-
-    /* This will signal a conditional variable, not get the forecast.
-     * It will also start the timer, if the location is configured for it
-     */
-    gtk_weather_get_forecast(GTK_WIDGET(weather));
-
     break;
 
   case PROP_FORECAST:
@@ -707,6 +705,11 @@ gtk_weather_set_location(GtkWeather * weather, gpointer location, gboolean backu
     }
   }
 
+  /* This will signal a conditional variable, not get the forecast.
+   * It will also start the timer, if the location is configured for it
+   */
+  gtk_weather_get_forecast(GTK_WIDGET(weather));
+
   /* Emit location-changed event */
   g_signal_emit_by_name(weather, "location-changed", location);
 }
@@ -750,6 +753,11 @@ gtk_weather_set_forecast(GtkWeather * weather, gpointer forecast)
 
   /* Emit forecast-changed event */
   g_signal_emit_by_name(weather, "forecast-changed", forecast);
+
+  /* Update the conditions dialog, if shown */
+  if (priv->conditions_data.shown) {
+    gtk_weather_update_conditions_dialog(weather);
+  }
 }
 
 
@@ -1129,6 +1137,8 @@ gtk_weather_create_popup_menu(GtkWeather * weather)
 void
 gtk_weather_preferences_dialog_response(GtkDialog *dialog, gint response, gpointer data)
 {
+  (void) dialog; /* unused - to squash a warning */
+
   LXW_LOG(LXW_DEBUG, "GtkWeather::popup_menu(%d)", response);
 
   GtkWeather * weather = GTK_WEATHER(data);
@@ -1163,14 +1173,14 @@ gtk_weather_preferences_dialog_response(GtkDialog *dialog, gint response, gpoint
       
       /* get forecast */
       gtk_weather_get_forecast(GTK_WIDGET(weather));
-
-      //gtk_weather_render(weather);
     }
 
     break;
 
   case GTK_RESPONSE_REJECT:
-    gtk_weather_set_location(weather, priv->previous_location, FALSE);
+    if (priv->previous_location) {
+      gtk_weather_set_location(weather, priv->previous_location, FALSE);
+    }
       
     gtk_weather_get_forecast(GTK_WIDGET(weather));
 
@@ -1237,19 +1247,22 @@ gtk_weather_create_preferences_dialog(GtkWidget * widget)
     return priv->preferences_data.dialog;
   }
 
-  priv->preferences_data.dialog = gtk_dialog_new_with_buttons(_("Weather Preferences"),
-                                                              NULL,
-                                                              GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-                                                              GTK_STOCK_OK, GTK_RESPONSE_ACCEPT,
-                                                              GTK_STOCK_CANCEL, GTK_RESPONSE_REJECT,
-                                                              NULL);
+  priv->preferences_data.dialog =
+    gtk_dialog_new_with_buttons(_("Weather Preferences"),
+                                NULL,
+                                GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+                                GTK_STOCK_OK, GTK_RESPONSE_ACCEPT,
+                                GTK_STOCK_CANCEL, GTK_RESPONSE_REJECT,
+                                NULL);
 
   /* Set dialog window icon */
-  gtk_weather_set_window_icon(GTK_WINDOW(priv->preferences_data.dialog), "gtk-preferences");
+  gtk_weather_set_window_icon(GTK_WINDOW(priv->preferences_data.dialog),
+                              "gtk-preferences");
 
   gtk_window_set_resizable(GTK_WINDOW(priv->preferences_data.dialog), FALSE);
 
-  gtk_dialog_set_default_response(GTK_DIALOG(priv->preferences_data.dialog), GTK_RESPONSE_ACCEPT);
+  gtk_dialog_set_default_response(GTK_DIALOG(priv->preferences_data.dialog),
+                                  GTK_RESPONSE_ACCEPT);
 
   GtkWidget * location_frame = gtk_frame_new(_("Current Location"));
 
@@ -1538,375 +1551,414 @@ gtk_weather_update_preferences_dialog(GtkWeather * weather)
 }
 
 /**
- * Creates and shows the current conditions dialog.
+ * Creates the current conditions dialog.
  *
- * @param widget Pointer to the current instance of the weather object.
+ * @param weather Pointer to the current instance of the weather object.
  */
-void
-gtk_weather_run_conditions_dialog(GtkWidget * widget)
+static void
+gtk_weather_create_conditions_dialog(GtkWeather * weather)
 {
-  /* @TODO: break this up into create() and run() */
-  GtkWeather * weather = GTK_WEATHER(widget);
-
   GtkWeatherPrivate * priv = GTK_WEATHER_GET_PRIVATE(weather);
 
   ConditionsDialogData * data = &(priv->conditions_data);
 
   LXW_LOG(LXW_DEBUG,
-          "GtkWeather::run_conditions_dialog(%s)",
+          "GtkWeather::create_conditions_dialog(%s)",
+          ((data && data->shown)  ? "SHOWN":
+           (data && !data->shown) ? "HIDDEN" : "NULL"));
+
+  if (data->shown) {
+    return;
+  }
+
+  LocationInfo * location = (LocationInfo *)priv->location;
+
+  gchar * dialog_title = g_strdup_printf(_("Current Conditions for %s"), 
+                                         (location)?location->alias_:"");
+
+  data->dialog = gtk_dialog_new_with_buttons(dialog_title,
+                                             NULL,
+                                             GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+                                             GTK_STOCK_REFRESH, GTK_RESPONSE_APPLY,
+                                             GTK_STOCK_OK, GTK_RESPONSE_ACCEPT,
+                                             NULL);
+
+  GtkWidget * everything_hbox = gtk_hbox_new(FALSE, 5);
+
+  /* This vbox gets filled-in when the table is populated */
+  GtkWidget * icon_vbox = gtk_vbox_new(FALSE, 1);
+
+  GtkWidget * forecast_table = gtk_table_new(9, 2, FALSE);
+
+  GtkWidget * location_name_label = gtk_label_new(_("Location:"));
+  data->location_text_label       = gtk_label_new(NULL);
+
+  GtkWidget * label_alignment = gtk_alignment_new(0, 0.5, 0, 0);
+  GtkWidget * text_alignment = gtk_alignment_new(0, 0.5, 0, 0);
+
+  gtk_container_add(GTK_CONTAINER(label_alignment), location_name_label);
+  gtk_container_add(GTK_CONTAINER(text_alignment), data->location_text_label);
+      
+  gtk_table_attach(GTK_TABLE(forecast_table), 
+                   label_alignment,
+                   0,1,0,1,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   2,2);
+
+  gtk_table_attach(GTK_TABLE(forecast_table), 
+                   text_alignment,
+                   1,2,0,1,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   2,2);
+
+  GtkWidget * updated_label = gtk_label_new(_("Last updated:"));
+  data->update_text_label   = gtk_label_new(NULL);
+
+  GtkWidget * updated_alignment      = gtk_alignment_new(0, 0.5, 0, 0);
+  GtkWidget * updated_text_alignment = gtk_alignment_new(0, 0.5, 0, 0);
+
+  gtk_container_add(GTK_CONTAINER(updated_alignment), updated_label);
+  gtk_container_add(GTK_CONTAINER(updated_text_alignment),
+                    data->update_text_label);
+
+  gtk_table_attach(GTK_TABLE(forecast_table),
+                   updated_alignment,
+                   0,1,1,2,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   2,2);
+
+  gtk_table_attach(GTK_TABLE(forecast_table), 
+                   updated_text_alignment,
+                   1,2,1,2,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   2,2);
+
+  GtkWidget * feels_label     = gtk_label_new(_("Feels like:"));
+  data->windchill_text_label  = gtk_label_new(NULL);
+
+  GtkWidget * feels_alignment = gtk_alignment_new(0, 0.5, 0, 0);
+  gtk_container_add(GTK_CONTAINER(feels_alignment), feels_label);
+
+  GtkWidget * feels_text_alignment = gtk_alignment_new(0, 0.5, 0, 0);
+  gtk_container_add(GTK_CONTAINER(feels_text_alignment),
+                    data->windchill_text_label);
+
+  gtk_table_attach(GTK_TABLE(forecast_table), 
+                   feels_alignment,
+                   0,1,2,3,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   2,2);
+
+  gtk_table_attach(GTK_TABLE(forecast_table), 
+                   feels_text_alignment,
+                   1,2,2,3,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   2,2);
+
+  GtkWidget * humidity_label = gtk_label_new(_("Humidity:"));
+  data->humidity_text_label  = gtk_label_new(NULL);
+
+  GtkWidget * humidity_alignment = gtk_alignment_new(0, 0.5, 0, 0);
+  gtk_container_add(GTK_CONTAINER(humidity_alignment), humidity_label);
+
+  GtkWidget * humidity_text_alignment = gtk_alignment_new(0, 0.5, 0, 0);
+  gtk_container_add(GTK_CONTAINER(humidity_text_alignment),
+                    data->humidity_text_label);
+
+  gtk_table_attach(GTK_TABLE(forecast_table), 
+                   humidity_alignment,
+                   0,1,3,4,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   2,2);
+
+  gtk_table_attach(GTK_TABLE(forecast_table), 
+                   humidity_text_alignment,
+                   1,2,3,4,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   2,2);
+
+  GtkWidget * pressure_label = gtk_label_new(_("Pressure:"));
+  data->pressure_text_label  = gtk_label_new(NULL);
+
+  GtkWidget * pressure_alignment = gtk_alignment_new(0, 0.5, 0, 0);
+  gtk_container_add(GTK_CONTAINER(pressure_alignment), pressure_label);
+
+  GtkWidget * pressure_text_alignment = gtk_alignment_new(0, 0.5, 0, 0);
+  gtk_container_add(GTK_CONTAINER(pressure_text_alignment),
+                    data->pressure_text_label);
+
+  gtk_table_attach(GTK_TABLE(forecast_table), 
+                   pressure_alignment,
+                   0,1,4,5,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   2,2);
+
+  gtk_table_attach(GTK_TABLE(forecast_table), 
+                   pressure_text_alignment,
+                   1,2,4,5,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   2,2);
+
+  GtkWidget * visibility_label = gtk_label_new(_("Visibility:"));
+  data->visibility_text_label  = gtk_label_new(NULL);
+
+  GtkWidget * visibility_alignment = gtk_alignment_new(0, 0.5, 0, 0);
+  gtk_container_add(GTK_CONTAINER(visibility_alignment), visibility_label);
+
+  GtkWidget * visibility_text_alignment = gtk_alignment_new(0, 0.5, 0, 0);
+  gtk_container_add(GTK_CONTAINER(visibility_text_alignment),
+                    data->visibility_text_label);
+
+  gtk_table_attach(GTK_TABLE(forecast_table), 
+                   visibility_alignment,
+                   0,1,5,6,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   2,2);
+
+  gtk_table_attach(GTK_TABLE(forecast_table), 
+                   visibility_text_alignment,
+                   1,2,5,6,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   2,2);
+
+  GtkWidget * wind_label = gtk_label_new(_("Wind:"));
+  data->wind_text_label  = gtk_label_new(NULL);
+
+  GtkWidget * wind_alignment = gtk_alignment_new(0, 0.5, 0, 0);
+  gtk_container_add(GTK_CONTAINER(wind_alignment), wind_label);
+
+  GtkWidget * wind_text_alignment = gtk_alignment_new(0, 0.5, 0, 0);
+  gtk_container_add(GTK_CONTAINER(wind_text_alignment),
+                    data->wind_text_label);
+
+  gtk_table_attach(GTK_TABLE(forecast_table), 
+                   wind_alignment,
+                   0,1,6,7,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   2,2);
+
+  gtk_table_attach(GTK_TABLE(forecast_table), 
+                   wind_text_alignment,
+                   1,2,6,7,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   2,2);
+
+  GtkWidget * sunrise_label = gtk_label_new(_("Sunrise:"));
+  data->sunrise_text_label  = gtk_label_new(NULL);
+
+  GtkWidget * sunrise_alignment = gtk_alignment_new(0, 0.5, 0, 0);
+  gtk_container_add(GTK_CONTAINER(sunrise_alignment), sunrise_label);
+
+  GtkWidget * sunrise_text_alignment = gtk_alignment_new(0, 0.5, 0, 0);
+  gtk_container_add(GTK_CONTAINER(sunrise_text_alignment),
+                    data->sunrise_text_label);
+
+  gtk_table_attach(GTK_TABLE(forecast_table), 
+                   sunrise_alignment,
+                   0,1,7,8,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   2,2);
+
+  gtk_table_attach(GTK_TABLE(forecast_table), 
+                   sunrise_text_alignment,
+                   1,2,7,8,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   2,2);
+
+  GtkWidget * sunset_label = gtk_label_new(_("Sunset:"));
+  data->sunset_text_label  = gtk_label_new(NULL);
+
+  GtkWidget * sunset_alignment = gtk_alignment_new(0, 0.5, 0, 0);
+  gtk_container_add(GTK_CONTAINER(sunset_alignment), sunset_label);
+
+  GtkWidget * sunset_text_alignment = gtk_alignment_new(0, 0.5, 0, 0);
+  gtk_container_add(GTK_CONTAINER(sunset_text_alignment),
+                    data->sunset_text_label);
+
+  gtk_table_attach(GTK_TABLE(forecast_table), 
+                   sunset_alignment,
+                   0,1,8,9,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   2,2);
+
+  gtk_table_attach(GTK_TABLE(forecast_table), 
+                   sunset_text_alignment,
+                   1,2,8,9,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   GTK_EXPAND | GTK_FILL | GTK_SHRINK,
+                   2,2);
+
+  /* Image and conditions label. Image is filled after dialog is shown 
+   * to nicely scale the image pixbuf.
+   */
+  data->conditions_image = gtk_image_new_from_stock(GTK_STOCK_MISSING_IMAGE,
+                                                    GTK_ICON_SIZE_MENU);
+
+  data->conditions_text_label = gtk_label_new(NULL);
+
+  /* Pack boxes */
+  gtk_box_pack_start(GTK_BOX(icon_vbox),
+                     data->conditions_image,
+                     FALSE,
+                     FALSE,
+                     1);
+
+  gtk_box_pack_start(GTK_BOX(icon_vbox),
+                     data->conditions_text_label,
+                     FALSE,
+                     FALSE,
+                     1);
+
+  gtk_box_pack_start(GTK_BOX(everything_hbox), icon_vbox, TRUE, TRUE, 35);
+  gtk_box_pack_start(GTK_BOX(everything_hbox), forecast_table, FALSE, FALSE, 5);
+      
+  gtk_box_pack_start(GTK_BOX(GTK_DIALOG(data->dialog)->vbox),
+                     everything_hbox,
+                     FALSE,
+                     FALSE,
+                     5);
+
+  /* Set dialog window icon */
+  gtk_weather_set_window_icon(GTK_WINDOW(data->dialog), "gtk-about");
+
+  gtk_window_set_resizable(GTK_WINDOW(data->dialog), FALSE);
+
+  gtk_dialog_set_default_response(GTK_DIALOG(data->dialog), GTK_RESPONSE_ACCEPT);
+
+  data->shown = TRUE;
+
+  gtk_widget_show_all(data->dialog);
+
+}
+
+/**
+ * Updates the current conditions dialog.
+ *
+ * @param weather Pointer to the current instance of the weather widget.
+ */
+static void
+gtk_weather_update_conditions_dialog(GtkWeather * weather)
+{
+  GtkWeatherPrivate * priv = GTK_WEATHER_GET_PRIVATE(weather);
+
+  ConditionsDialogData * data = &(priv->conditions_data);
+
+  LXW_LOG(LXW_DEBUG,
+          "GtkWeather::update_conditions_dialog(%s)",
           ((data && data->shown)  ? "SHOWN":
            (data && !data->shown) ? "HIDDEN" : "NULL"));
 
   LocationInfo * location = (LocationInfo *)priv->location;
   ForecastInfo * forecast = (ForecastInfo *)priv->forecast;
 
-  if (location && forecast) {
-    if (shown) {
-      return;
+  if (location && forecast && data->dialog) {
+    if (pthread_rwlock_rdlock(&(priv->rwlock)) == 0) {
+      gchar * location_label_text = g_strconcat((location->city_)?location->city_:"",
+                                                (location->city_)?", ":"",
+                                                (location->state_)?location->state_:"",
+                                                (location->state_)?", ":"",
+                                                (location->country_)?location->country_:"",
+                                                NULL);
+
+      gtk_label_set_text(GTK_LABEL(data->location_text_label),
+                         location_label_text);
+
+      gtk_label_set_text(GTK_LABEL(data->update_text_label),
+                         forecast->time_);
+
+      gchar * windchill = g_strdup_printf("%d \302\260%s", 
+                                          forecast->windChill_,
+                                          forecast->units_.temperature_);
+
+      gtk_label_set_text(GTK_LABEL(data->windchill_text_label),
+                         windchill);
+
+      gchar * humidity = g_strdup_printf("%d%%", forecast->humidity_);
+
+      gtk_label_set_text(GTK_LABEL(data->humidity_text_label), humidity);
+
+      gchar * pressure = g_strdup_printf("%4.2f %s", 
+                                         forecast->pressure_,
+                                         forecast->units_.pressure_);
+
+      gtk_label_set_text(GTK_LABEL(data->pressure_text_label), pressure);
+
+      gchar * visibility = g_strdup_printf("%4.2f %s", 
+                                           forecast->visibility_,
+                                           forecast->units_.distance_);
+
+      gtk_label_set_text(GTK_LABEL(data->visibility_text_label), visibility);
+
+      gchar * wind = g_strdup_printf("%s %d %s", 
+                                     forecast->windDirection_,
+                                     forecast->windSpeed_,
+                                     forecast->units_.speed_);
+
+      gtk_label_set_text(GTK_LABEL(data->wind_text_label), wind);
+      gtk_label_set_text(GTK_LABEL(data->sunrise_text_label),
+                         forecast->sunrise_);
+
+      gtk_label_set_text(GTK_LABEL(data->sunset_text_label),
+                         forecast->sunset_);
+
+      gchar * conditions_label_text = g_strdup_printf("<b>%d \302\260%s %s</b>", 
+                                                      forecast->temperature_,
+                                                      forecast->units_.temperature_,
+                                                      _(forecast->conditions_));
+
+      gtk_label_set_markup(GTK_LABEL(data->conditions_text_label),
+                           conditions_label_text);
+
+      /* Free everything */
+      g_free(conditions_label_text);
+      g_free(wind);
+      g_free(visibility);
+      g_free(pressure);
+      g_free(windchill);
+      g_free(humidity);
+      g_free(location_label_text);
+
+      data->shown = TRUE;
+
+      gtk_widget_show_all(data->dialog);
+
+      /* Get dimensions to create proper icon... */
+      GtkRequisition req;
+
+      gtk_widget_size_request(data->dialog, &req);
+
+      /* Need the minimum */
+      gint dim = (req.width < req.height) ? req.width/2 : req.height/2;
+
+      GdkPixbuf * icon_buf = gdk_pixbuf_scale_simple(forecast->image_,
+                                                     dim, dim,
+                                                     GDK_INTERP_BILINEAR);
+
+      gtk_image_set_from_pixbuf(GTK_IMAGE(data->conditions_image), icon_buf);
+
+      g_object_unref(icon_buf);
+
+      pthread_rwlock_unlock(&(priv->rwlock));
     }
 
-    /* Both are available */
-    gchar * dialog_title = g_strdup_printf(_("Current Conditions for %s"), 
-                                           (location)?location->alias_:"");
-
-    GtkWidget * dialog = gtk_dialog_new_with_buttons(dialog_title,
-                                                     NULL,
-                                                     GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-                                                     GTK_STOCK_REFRESH, GTK_RESPONSE_APPLY,
-                                                     GTK_STOCK_OK, GTK_RESPONSE_ACCEPT,
-                                                     NULL);
-
-    GtkWidget * everything_hbox = gtk_hbox_new(FALSE, 5);
-
-    /* This vbox gets filled-in when the table is populated */
-    GtkWidget * icon_vbox = gtk_vbox_new(FALSE, 1);
-
-    GtkWidget * forecast_table = gtk_table_new(9, 2, FALSE);
-
-    gchar * location_label_text = g_strconcat((location->city_)?location->city_:"",
-                                              (location->city_)?", ":"",
-                                              (location->state_)?location->state_:"",
-                                              (location->state_)?", ":"",
-                                              (location->country_)?location->country_:"",
-                                              NULL);
-
-    GtkWidget * location_name_label = gtk_label_new(_("Location:"));
-    GtkWidget * location_name_text  = gtk_label_new(location_label_text);
-
-    GtkWidget * label_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-    GtkWidget * text_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-
-    gtk_container_add(GTK_CONTAINER(label_alignment), location_name_label);
-    gtk_container_add(GTK_CONTAINER(text_alignment), location_name_text);
-      
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     label_alignment,
-                     0,1,0,1,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     text_alignment,
-                     1,2,0,1,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    GtkWidget * updated_label = gtk_label_new(_("Last updated:"));
-    GtkWidget * updated_text  = gtk_label_new(forecast->time_);
-
-    GtkWidget * updated_alignment      = gtk_alignment_new(0, 0.5, 0, 0);
-    GtkWidget * updated_text_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-
-    gtk_container_add(GTK_CONTAINER(updated_alignment), updated_label);
-    gtk_container_add(GTK_CONTAINER(updated_text_alignment), updated_text);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     updated_alignment,
-                     0,1,1,2,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     updated_text_alignment,
-                     1,2,1,2,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    gchar * feels = g_strdup_printf("%d \302\260%s", 
-                                    forecast->windChill_,
-                                    forecast->units_.temperature_);
-
-    GtkWidget * feels_label = gtk_label_new(_("Feels like:"));
-    GtkWidget * feels_text  = gtk_label_new(feels);
-
-    GtkWidget * feels_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-    gtk_container_add(GTK_CONTAINER(feels_alignment), feels_label);
-
-    GtkWidget * feels_text_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-    gtk_container_add(GTK_CONTAINER(feels_text_alignment), feels_text);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     feels_alignment,
-                     0,1,2,3,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     feels_text_alignment,
-                     1,2,2,3,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    gchar * humidity = g_strdup_printf("%d%%", forecast->humidity_);
-
-    GtkWidget * humidity_label = gtk_label_new(_("Humidity:"));
-    GtkWidget * humidity_text  = gtk_label_new(humidity);
-
-    GtkWidget * humidity_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-    gtk_container_add(GTK_CONTAINER(humidity_alignment), humidity_label);
-
-    GtkWidget * humidity_text_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-    gtk_container_add(GTK_CONTAINER(humidity_text_alignment), humidity_text);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     humidity_alignment,
-                     0,1,3,4,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     humidity_text_alignment,
-                     1,2,3,4,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    gchar * pressure = g_strdup_printf("%4.2f %s", 
-                                       forecast->pressure_,
-                                       forecast->units_.pressure_);
-
-    GtkWidget * pressure_label = gtk_label_new(_("Pressure:"));
-    GtkWidget * pressure_text  = gtk_label_new(pressure);
-
-    GtkWidget * pressure_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-    gtk_container_add(GTK_CONTAINER(pressure_alignment), pressure_label);
-
-    GtkWidget * pressure_text_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-    gtk_container_add(GTK_CONTAINER(pressure_text_alignment), pressure_text);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     pressure_alignment,
-                     0,1,4,5,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     pressure_text_alignment,
-                     1,2,4,5,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    gchar * visibility = g_strdup_printf("%4.2f %s", 
-                                         forecast->visibility_,
-                                         forecast->units_.distance_);
-
-    GtkWidget * visibility_label = gtk_label_new(_("Visibility:"));
-    GtkWidget * visibility_text  = gtk_label_new(visibility);
-
-    GtkWidget * visibility_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-    gtk_container_add(GTK_CONTAINER(visibility_alignment), visibility_label);
-
-    GtkWidget * visibility_text_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-    gtk_container_add(GTK_CONTAINER(visibility_text_alignment), visibility_text);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     visibility_alignment,
-                     0,1,5,6,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     visibility_text_alignment,
-                     1,2,5,6,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    gchar * wind = g_strdup_printf("%s %d %s", 
-                                   forecast->windDirection_,
-                                   forecast->windSpeed_,
-                                   forecast->units_.speed_);
-
-    GtkWidget * wind_label = gtk_label_new(_("Wind:"));
-    GtkWidget * wind_text  = gtk_label_new(wind);
-
-    GtkWidget * wind_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-    gtk_container_add(GTK_CONTAINER(wind_alignment), wind_label);
-
-    GtkWidget * wind_text_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-    gtk_container_add(GTK_CONTAINER(wind_text_alignment), wind_text);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     wind_alignment,
-                     0,1,6,7,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     wind_text_alignment,
-                     1,2,6,7,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    GtkWidget * sunrise_label = gtk_label_new(_("Sunrise:"));
-    GtkWidget * sunrise_text  = gtk_label_new(forecast->sunrise_);
-
-    GtkWidget * sunrise_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-    gtk_container_add(GTK_CONTAINER(sunrise_alignment), sunrise_label);
-
-    GtkWidget * sunrise_text_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-    gtk_container_add(GTK_CONTAINER(sunrise_text_alignment), sunrise_text);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     sunrise_alignment,
-                     0,1,7,8,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     sunrise_text_alignment,
-                     1,2,7,8,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    GtkWidget * sunset_label = gtk_label_new(_("Sunset:"));
-    GtkWidget * sunset_text  = gtk_label_new(forecast->sunset_);
-
-    GtkWidget * sunset_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-    gtk_container_add(GTK_CONTAINER(sunset_alignment), sunset_label);
-
-    GtkWidget * sunset_text_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-    gtk_container_add(GTK_CONTAINER(sunset_text_alignment), sunset_text);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     sunset_alignment,
-                     0,1,8,9,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     sunset_text_alignment,
-                     1,2,8,9,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    /* Image and conditions label. Image is filled after dialog is shown 
-     * to nicely scale the image pixbuf.
-     */
-    GtkWidget * icon_image = gtk_image_new_from_stock(GTK_STOCK_MISSING_IMAGE,
-                                                      GTK_ICON_SIZE_MENU);
-
-    gchar * conditions_label_text = g_strdup_printf("<b>%d \302\260%s %s</b>", 
-                                                    forecast->temperature_,
-                                                    forecast->units_.temperature_,
-                                                    _(forecast->conditions_));
-
-    GtkWidget * conditions_label = gtk_label_new(NULL);
-    gtk_label_set_markup(GTK_LABEL(conditions_label), conditions_label_text);
-
-    /* Pack boxes */
-    gtk_box_pack_start(GTK_BOX(icon_vbox), icon_image, FALSE, FALSE, 1);
-    gtk_box_pack_start(GTK_BOX(icon_vbox), conditions_label, FALSE, FALSE, 1);
-
-    gtk_box_pack_start(GTK_BOX(everything_hbox), icon_vbox, TRUE, TRUE, 35);
-    gtk_box_pack_start(GTK_BOX(everything_hbox), forecast_table, FALSE, FALSE, 5);
-
-    /* Free everything */
-    g_free(conditions_label_text);
-    g_free(wind);
-    g_free(visibility);
-    g_free(pressure);
-    g_free(feels);
-    g_free(humidity);
-    g_free(location_label_text);
-    g_free(dialog_title);
-      
-    gtk_box_pack_start(GTK_BOX(GTK_DIALOG(dialog)->vbox), everything_hbox, FALSE, FALSE, 5);
-
-  
-    /* Set dialog window icon */
-    gtk_weather_set_window_icon(GTK_WINDOW(dialog), "gtk-about");
-
-    gtk_window_set_resizable(GTK_WINDOW(dialog), FALSE);
-
-    gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
-
-    shown = TRUE;
-
-    gtk_widget_show_all(dialog);
-
-    /* Get dimensions to create proper icon... */
-    GtkRequisition req;
-
-    gtk_widget_size_request(dialog, &req);
-
-    /* Need the minimum */
-    gint dim = (req.width < req.height) ? req.width/2 : req.height/2;
-
-    GdkPixbuf * icon_buf = gdk_pixbuf_scale_simple(forecast->image_,
-                                                   dim, dim,
-                                                   GDK_INTERP_BILINEAR);
-
-    gtk_image_set_from_pixbuf(GTK_IMAGE(icon_image), icon_buf);
-
-    g_object_unref(icon_buf);
-
-    gint response = GTK_RESPONSE_NONE;
-
-    do {
-      response = gtk_dialog_run(GTK_DIALOG(dialog));
-
-      if (response == GTK_RESPONSE_APPLY) {
-        gtk_weather_get_forecast(widget);
-        /*gtk_weather_update_conditions_dialog(widget); */
-      }
-
-    } while (response != GTK_RESPONSE_ACCEPT);
-
-    if (GTK_IS_WIDGET(dialog)) {
-      gtk_widget_destroy(dialog);
-    }
-
-    dialog = NULL;
-
-    shown = FALSE;
-  } else if (!forecast && location) {
-    gchar * error_msg = g_strdup_printf(_("Forecast for %s unavailable."),
-                                        location->alias_);
-
-    gtk_weather_run_error_dialog(NULL, error_msg);
-
-    g_free(error_msg);
-  } else {
-    gtk_weather_run_error_dialog(NULL, _("Location not set."));
   }
-  
 }
 
 /**
@@ -1917,7 +1969,6 @@ gtk_weather_run_conditions_dialog(GtkWidget * widget)
 void
 gtk_weather_run_conditions_dialog(GtkWidget * widget)
 {
-  /* @TODO: break this up into create() and run() */
   GtkWeather * weather = GTK_WEATHER(widget);
 
   GtkWeatherPrivate * priv = GTK_WEATHER_GET_PRIVATE(weather);
@@ -1933,346 +1984,43 @@ gtk_weather_run_conditions_dialog(GtkWidget * widget)
   ForecastInfo * forecast = (ForecastInfo *)priv->forecast;
 
   if (location && forecast) {
-    if (shown) {
+    if (data->shown) {
       return;
     }
 
-    /* Both are available */
-    gchar * dialog_title = g_strdup_printf(_("Current Conditions for %s"), 
-                                           (location)?location->alias_:"");
+    gtk_weather_create_conditions_dialog(weather);
 
-    GtkWidget * dialog = gtk_dialog_new_with_buttons(dialog_title,
-                                                     NULL,
-                                                     GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-                                                     GTK_STOCK_REFRESH, GTK_RESPONSE_APPLY,
-                                                     GTK_STOCK_OK, GTK_RESPONSE_ACCEPT,
-                                                     NULL);
-
-    GtkWidget * everything_hbox = gtk_hbox_new(FALSE, 5);
-
-    /* This vbox gets filled-in when the table is populated */
-    GtkWidget * icon_vbox = gtk_vbox_new(FALSE, 1);
-
-    GtkWidget * forecast_table = gtk_table_new(9, 2, FALSE);
-
-    gchar * location_label_text = g_strconcat((location->city_)?location->city_:"",
-                                              (location->city_)?", ":"",
-                                              (location->state_)?location->state_:"",
-                                              (location->state_)?", ":"",
-                                              (location->country_)?location->country_:"",
-                                              NULL);
-
-    GtkWidget * location_name_label = gtk_label_new(_("Location:"));
-    GtkWidget * location_name_text  = gtk_label_new(location_label_text);
-
-    GtkWidget * label_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-    GtkWidget * text_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-
-    gtk_container_add(GTK_CONTAINER(label_alignment), location_name_label);
-    gtk_container_add(GTK_CONTAINER(text_alignment), location_name_text);
-      
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     label_alignment,
-                     0,1,0,1,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     text_alignment,
-                     1,2,0,1,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    GtkWidget * updated_label = gtk_label_new(_("Last updated:"));
-    GtkWidget * updated_text  = gtk_label_new(forecast->time_);
-
-    GtkWidget * updated_alignment      = gtk_alignment_new(0, 0.5, 0, 0);
-    GtkWidget * updated_text_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-
-    gtk_container_add(GTK_CONTAINER(updated_alignment), updated_label);
-    gtk_container_add(GTK_CONTAINER(updated_text_alignment), updated_text);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     updated_alignment,
-                     0,1,1,2,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     updated_text_alignment,
-                     1,2,1,2,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    gchar * feels = g_strdup_printf("%d \302\260%s", 
-                                    forecast->windChill_,
-                                    forecast->units_.temperature_);
-
-    GtkWidget * feels_label = gtk_label_new(_("Feels like:"));
-    GtkWidget * feels_text  = gtk_label_new(feels);
-
-    GtkWidget * feels_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-    gtk_container_add(GTK_CONTAINER(feels_alignment), feels_label);
-
-    GtkWidget * feels_text_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-    gtk_container_add(GTK_CONTAINER(feels_text_alignment), feels_text);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     feels_alignment,
-                     0,1,2,3,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     feels_text_alignment,
-                     1,2,2,3,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    gchar * humidity = g_strdup_printf("%d%%", forecast->humidity_);
-
-    GtkWidget * humidity_label = gtk_label_new(_("Humidity:"));
-    GtkWidget * humidity_text  = gtk_label_new(humidity);
-
-    GtkWidget * humidity_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-    gtk_container_add(GTK_CONTAINER(humidity_alignment), humidity_label);
-
-    GtkWidget * humidity_text_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-    gtk_container_add(GTK_CONTAINER(humidity_text_alignment), humidity_text);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     humidity_alignment,
-                     0,1,3,4,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     humidity_text_alignment,
-                     1,2,3,4,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    gchar * pressure = g_strdup_printf("%4.2f %s", 
-                                       forecast->pressure_,
-                                       forecast->units_.pressure_);
-
-    GtkWidget * pressure_label = gtk_label_new(_("Pressure:"));
-    GtkWidget * pressure_text  = gtk_label_new(pressure);
-
-    GtkWidget * pressure_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-    gtk_container_add(GTK_CONTAINER(pressure_alignment), pressure_label);
-
-    GtkWidget * pressure_text_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-    gtk_container_add(GTK_CONTAINER(pressure_text_alignment), pressure_text);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     pressure_alignment,
-                     0,1,4,5,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     pressure_text_alignment,
-                     1,2,4,5,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    gchar * visibility = g_strdup_printf("%4.2f %s", 
-                                         forecast->visibility_,
-                                         forecast->units_.distance_);
-
-    GtkWidget * visibility_label = gtk_label_new(_("Visibility:"));
-    GtkWidget * visibility_text  = gtk_label_new(visibility);
-
-    GtkWidget * visibility_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-    gtk_container_add(GTK_CONTAINER(visibility_alignment), visibility_label);
-
-    GtkWidget * visibility_text_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-    gtk_container_add(GTK_CONTAINER(visibility_text_alignment), visibility_text);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     visibility_alignment,
-                     0,1,5,6,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     visibility_text_alignment,
-                     1,2,5,6,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    gchar * wind = g_strdup_printf("%s %d %s", 
-                                   forecast->windDirection_,
-                                   forecast->windSpeed_,
-                                   forecast->units_.speed_);
-
-    GtkWidget * wind_label = gtk_label_new(_("Wind:"));
-    GtkWidget * wind_text  = gtk_label_new(wind);
-
-    GtkWidget * wind_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-    gtk_container_add(GTK_CONTAINER(wind_alignment), wind_label);
-
-    GtkWidget * wind_text_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-    gtk_container_add(GTK_CONTAINER(wind_text_alignment), wind_text);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     wind_alignment,
-                     0,1,6,7,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     wind_text_alignment,
-                     1,2,6,7,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    GtkWidget * sunrise_label = gtk_label_new(_("Sunrise:"));
-    GtkWidget * sunrise_text  = gtk_label_new(forecast->sunrise_);
-
-    GtkWidget * sunrise_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-    gtk_container_add(GTK_CONTAINER(sunrise_alignment), sunrise_label);
-
-    GtkWidget * sunrise_text_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-    gtk_container_add(GTK_CONTAINER(sunrise_text_alignment), sunrise_text);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     sunrise_alignment,
-                     0,1,7,8,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     sunrise_text_alignment,
-                     1,2,7,8,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    GtkWidget * sunset_label = gtk_label_new(_("Sunset:"));
-    GtkWidget * sunset_text  = gtk_label_new(forecast->sunset_);
-
-    GtkWidget * sunset_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-    gtk_container_add(GTK_CONTAINER(sunset_alignment), sunset_label);
-
-    GtkWidget * sunset_text_alignment = gtk_alignment_new(0, 0.5, 0, 0);
-    gtk_container_add(GTK_CONTAINER(sunset_text_alignment), sunset_text);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     sunset_alignment,
-                     0,1,8,9,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    gtk_table_attach(GTK_TABLE(forecast_table), 
-                     sunset_text_alignment,
-                     1,2,8,9,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     GTK_EXPAND | GTK_FILL | GTK_SHRINK,
-                     2,2);
-
-    /* Image and conditions label. Image is filled after dialog is shown 
-     * to nicely scale the image pixbuf.
-     */
-    GtkWidget * icon_image = gtk_image_new_from_stock(GTK_STOCK_MISSING_IMAGE,
-                                                      GTK_ICON_SIZE_MENU);
-
-    gchar * conditions_label_text = g_strdup_printf("<b>%d \302\260%s %s</b>", 
-                                                    forecast->temperature_,
-                                                    forecast->units_.temperature_,
-                                                    _(forecast->conditions_));
-
-    GtkWidget * conditions_label = gtk_label_new(NULL);
-    gtk_label_set_markup(GTK_LABEL(conditions_label), conditions_label_text);
-
-    /* Pack boxes */
-    gtk_box_pack_start(GTK_BOX(icon_vbox), icon_image, FALSE, FALSE, 1);
-    gtk_box_pack_start(GTK_BOX(icon_vbox), conditions_label, FALSE, FALSE, 1);
-
-    gtk_box_pack_start(GTK_BOX(everything_hbox), icon_vbox, TRUE, TRUE, 35);
-    gtk_box_pack_start(GTK_BOX(everything_hbox), forecast_table, FALSE, FALSE, 5);
-
-    /* Free everything */
-    g_free(conditions_label_text);
-    g_free(wind);
-    g_free(visibility);
-    g_free(pressure);
-    g_free(feels);
-    g_free(humidity);
-    g_free(location_label_text);
-    g_free(dialog_title);
-      
-    gtk_box_pack_start(GTK_BOX(GTK_DIALOG(dialog)->vbox), everything_hbox, FALSE, FALSE, 5);
-
-  
-    /* Set dialog window icon */
-    gtk_weather_set_window_icon(GTK_WINDOW(dialog), "gtk-about");
-
-    gtk_window_set_resizable(GTK_WINDOW(dialog), FALSE);
-
-    gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
-
-    shown = TRUE;
-
-    gtk_widget_show_all(dialog);
-
-    /* Get dimensions to create proper icon... */
-    GtkRequisition req;
-
-    gtk_widget_size_request(dialog, &req);
-
-    /* Need the minimum */
-    gint dim = (req.width < req.height) ? req.width/2 : req.height/2;
-
-    GdkPixbuf * icon_buf = gdk_pixbuf_scale_simple(forecast->image_,
-                                                   dim, dim,
-                                                   GDK_INTERP_BILINEAR);
-
-    gtk_image_set_from_pixbuf(GTK_IMAGE(icon_image), icon_buf);
-
-    g_object_unref(icon_buf);
+    gtk_weather_update_conditions_dialog(weather);
 
     gint response = GTK_RESPONSE_NONE;
 
     do {
-      response = gtk_dialog_run(GTK_DIALOG(dialog));
+      response = gtk_dialog_run(GTK_DIALOG(data->dialog));
 
       if (response == GTK_RESPONSE_APPLY) {
         gtk_weather_get_forecast(widget);
-        /*gtk_weather_update_conditions_dialog(widget); */
       }
 
     } while (response != GTK_RESPONSE_ACCEPT);
 
-    if (GTK_IS_WIDGET(dialog)) {
-      gtk_widget_destroy(dialog);
+    if (GTK_IS_WIDGET(data->dialog)) {
+      gtk_widget_destroy(data->dialog);
     }
 
-    dialog = NULL;
+    data->dialog = NULL;
 
-    shown = FALSE;
+    data->shown = FALSE;
   } else if (!forecast && location) {
-    gchar * error_msg = g_strdup_printf(_("Forecast for %s unavailable."),
-                                        location->alias_);
+    gchar * error_msg = NULL;
 
-    gtk_weather_run_error_dialog(NULL, error_msg);
+    if (pthread_rwlock_rdlock(&(priv->rwlock)) == 0) {
+      error_msg = g_strdup_printf(_("Forecast for %s unavailable."),
+                                  location->alias_);
+
+      pthread_rwlock_unlock(&(priv->rwlock));
+    }
+
+    gtk_weather_run_error_dialog(NULL, (error_msg) ? error_msg : "FAIL!");
 
     g_free(error_msg);
   } else {
@@ -2293,7 +2041,8 @@ gtk_weather_show_location_progress_bar(GtkWeather * weather)
 
   GtkWeatherPrivate * priv = GTK_WEATHER_GET_PRIVATE(weather);
 
-  gchar * progress_str = g_strdup_printf(_("Searching for '%s'..."), priv->location_data.location);
+  gchar * progress_str = g_strdup_printf(_("Searching for '%s'..."),
+                                         priv->location_data.location);
 
   GtkWidget * dialog = gtk_dialog_new_with_buttons(progress_str,
                                                    GTK_WINDOW(priv->preferences_data.dialog),
@@ -2797,9 +2546,10 @@ gtk_weather_get_forecast(GtkWidget * widget)
       g_source_remove(priv->forecast_data.timerid);
     }
 
-    priv->forecast_data.timerid = g_timeout_add_seconds(interval_in_seconds,
-                                                        gtk_weather_get_forecast_timerfunc,
-                                                        (gpointer)widget);
+    priv->forecast_data.timerid =
+      g_timeout_add_seconds(interval_in_seconds,
+                            gtk_weather_get_forecast_timerfunc,
+                            (gpointer)widget);
   } else if (priv->forecast_data.timerid > 0) {
     g_source_remove(priv->forecast_data.timerid);
 
@@ -2875,9 +2625,12 @@ gtk_weather_get_forecast_threadfunc(void * arg)
 
   LXW_LOG(LXW_DEBUG, "GtkWeather::threadfunc active is %d", ftdata->active);
 
+  /* Need to force the first refresh on thread start if location is set */
+  gboolean initial = (location) ? TRUE : FALSE;
+
   while (ftdata->active) {
     LXW_LOG(LXW_DEBUG, "\tabout to wait");
-    if (pthread_mutex_lock(&(priv->mutex)) == 0) {
+    if (!initial && pthread_mutex_lock(&(priv->mutex)) == 0) {
       pthread_cond_wait(&(priv->cond), &(priv->mutex));
 
       LXW_LOG(LXW_DEBUG, "\tPOPPED!");
@@ -2887,6 +2640,8 @@ gtk_weather_get_forecast_threadfunc(void * arg)
     if (!ftdata->active) {
       break;
     }
+
+    initial = FALSE;
 
     /* write lock */
     LXW_LOG(LXW_DEBUG, "\tabout to writelock");

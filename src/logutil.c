@@ -182,7 +182,9 @@ logutil_log(LXWEATHER_LOGLEVEL level, const char * msg, ...)
           else
             {
               /* write to file */
-              (void) write(g_fd, buf, bufsz); /* to prevent compile warning */
+              size_t foo = write(g_fd, buf, bufsz);
+
+              (void) foo;
             }
         }
            

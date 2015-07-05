@@ -126,7 +126,7 @@ static void
 location_changed(GtkWeather * weather, gpointer location, gpointer data)
 {
   /* To avoid compilation warning */
-  (void)weather;
+  (void) weather;
 
   WeatherWidgetEntry * entry = (WeatherWidgetEntry *)data; //entry_find(weather);
 
@@ -136,7 +136,6 @@ location_changed(GtkWeather * weather, gpointer location, gpointer data)
   if (entry) {
     gtk_status_icon_set_from_stock(entry->icon_, GTK_STOCK_DIALOG_WARNING);
   }
-
 }
 
 /**
