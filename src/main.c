@@ -155,32 +155,32 @@ forecast_changed(GtkWeather * weather, gpointer forecast, gpointer data)
   
   if (entry) {
     if (forecast) {
-      LXW_LOG(LXW_ERROR, "Setting status icon.");
+      LXW_LOG(LXW_DEBUG, "Setting status icon.");
       gtk_status_icon_set_from_pixbuf(entry->icon_,
                                       ((ForecastInfo *)forecast)->image_);
     } else {
-      LXW_LOG(LXW_ERROR, "Setting status icon STOCK.");
+      LXW_LOG(LXW_DEBUG, "Setting status icon STOCK.");
       gtk_status_icon_set_from_stock(entry->icon_,
                                      GTK_STOCK_DIALOG_WARNING);
     }
 
-    LXW_LOG(LXW_ERROR, "Getting status tooltip.");
+    LXW_LOG(LXW_DEBUG, "Getting status tooltip.");
     gchar * tooltip_text = gtk_weather_get_tooltip_text(GTK_WIDGET(weather));
 
-    LXW_LOG(LXW_ERROR, "Setting status tooltip.");
+    LXW_LOG(LXW_DEBUG, "Setting status tooltip.");
     gtk_status_icon_set_tooltip_text(entry->icon_, tooltip_text);
 
-    LXW_LOG(LXW_ERROR, "Setting icon visible %d, %d.", 
+    LXW_LOG(LXW_DEBUG, "Setting icon visible %d, %d.",
             gtk_status_icon_get_visible(entry->icon_),
             gtk_status_icon_is_embedded(entry->icon_));
 
     //gtk_status_icon_set_visible(entry->icon_, TRUE);
 
-    LXW_LOG(LXW_ERROR, "free tooltip.");
+    LXW_LOG(LXW_DEBUG, "free tooltip.");
     g_free(tooltip_text);
   }
 
-  LXW_LOG(LXW_ERROR, "...Done.");  
+  LXW_LOG(LXW_DEBUG, "...Done.");
 }
 
 /**

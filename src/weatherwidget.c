@@ -122,7 +122,7 @@ struct _ConditionsDialogData
 
 struct _LocationThreadData
 {
-  pthread_t      * tid; // @TODO: remember to not make this a pointer
+  pthread_t        tid;
   gchar          * location;
   GtkProgressBar * progress_bar;
   GtkWidget      * progress_dialog;
@@ -902,7 +902,6 @@ gtk_weather_change_location(GtkWidget * widget, GdkEventButton * event)
       gchar * new_location = g_strdup(gtk_entry_get_text(GTK_ENTRY(location_entry)));
             
       /* start thread here, let the progress bar do its own magic */
-      pthread_t      tid;
       pthread_attr_t tattr;
             
       int ret = pthread_attr_init(&tattr);
@@ -911,7 +910,7 @@ gtk_weather_change_location(GtkWidget * widget, GdkEventButton * event)
         LOG_ERRNO(ret, "pthread_attr_init");
       }
 
-      ret = pthread_create(&tid,
+      ret = pthread_create(&(priv->location_data.tid),
                            &tattr,
                            &gtk_weather_get_location_threadfunc,
                            new_location);
@@ -926,19 +925,19 @@ gtk_weather_change_location(GtkWidget * widget, GdkEventButton * event)
         LOG_ERRNO(ret, "pthread_attr_destroy");
       }
       
-      priv->location_data.tid      = &tid;
       priv->location_data.location = new_location;
 
       /* show progress bar and lookup selected location */
       gtk_weather_show_location_progress_bar(GTK_WEATHER(widget));
 
       void * result = NULL;
-      ret = pthread_join(tid, &result);
+      ret = pthread_join(priv->location_data.tid, &result);
       if (ret != 0) {
         LOG_ERRNO(ret, "pthread_join");
       }
 
-      gchar * error_msg = g_strdup_printf(_("Location '%s' not found!"), new_location);
+      gchar * error_msg = g_strdup_printf(_("Location '%s' not found!"),
+                                          new_location);
       
       if (result && result != PTHREAD_CANCELED) {
         GList * list = (GList *)result;
@@ -1583,6 +1582,8 @@ gtk_weather_create_conditions_dialog(GtkWeather * weather)
                                              GTK_STOCK_OK, GTK_RESPONSE_ACCEPT,
                                              NULL);
 
+  g_free(dialog_title);
+
   GtkWidget * everything_hbox = gtk_hbox_new(FALSE, 5);
 
   /* This vbox gets filled-in when the table is populated */
@@ -2044,12 +2045,13 @@ gtk_weather_show_location_progress_bar(GtkWeather * weather)
   gchar * progress_str = g_strdup_printf(_("Searching for '%s'..."),
                                          priv->location_data.location);
 
-  GtkWidget * dialog = gtk_dialog_new_with_buttons(progress_str,
-                                                   GTK_WINDOW(priv->preferences_data.dialog),
-                                                   GTK_DIALOG_DESTROY_WITH_PARENT,
-                                                   GTK_STOCK_CANCEL,
-                                                   GTK_RESPONSE_CANCEL,
-                                                   NULL);
+  priv->location_data.progress_dialog =
+    gtk_dialog_new_with_buttons(progress_str,
+                                GTK_WINDOW(priv->preferences_data.dialog),
+                                GTK_DIALOG_DESTROY_WITH_PARENT,
+                                GTK_STOCK_CANCEL,
+                                GTK_RESPONSE_CANCEL,
+                                NULL);
 
   //  gtk_window_set_decorated(GTK_WINDOW(dialog), FALSE);
 
@@ -2058,31 +2060,30 @@ gtk_weather_show_location_progress_bar(GtkWeather * weather)
 
   priv->location_data.progress_bar = GTK_PROGRESS_BAR(progress_bar);
 
-  priv->location_data.progress_dialog = dialog;
-
   gtk_progress_bar_set_text(GTK_PROGRESS_BAR(progress_bar), progress_str);
 
-  gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progress_bar), 0.5);
+  gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progress_bar), 0.2);
 
   gtk_container_add(GTK_CONTAINER(alignment), progress_bar);
 
-  gtk_box_pack_start_defaults(GTK_BOX(GTK_DIALOG(dialog)->vbox), alignment);
+  gtk_box_pack_start_defaults(GTK_BOX(GTK_DIALOG(priv->location_data.progress_dialog)->vbox),
+                              alignment);
 
   int timer = g_timeout_add(500,
                             gtk_weather_update_location_progress_bar,
                             &priv->location_data);
 
-  gtk_widget_show_all(dialog);
+  gtk_widget_show_all(priv->location_data.progress_dialog);
 
-  gint response = gtk_dialog_run(GTK_DIALOG(dialog));
+  gint response = gtk_dialog_run(GTK_DIALOG(priv->location_data.progress_dialog));
 
   switch(response) {
   case GTK_RESPONSE_ACCEPT:
     break;
 
   case GTK_RESPONSE_CANCEL:
-    if (pthread_kill(*(priv->location_data.tid), 0) != ESRCH) {
-      int ret = pthread_cancel(*(priv->location_data.tid));
+    if (pthread_kill(priv->location_data.tid, 0) != ESRCH) {
+      int ret = pthread_cancel(priv->location_data.tid);
 
       if (ret != 0) {
         LOG_ERRNO(ret, "pthread_cancel");
@@ -2099,8 +2100,10 @@ gtk_weather_show_location_progress_bar(GtkWeather * weather)
     break;
   }
 
-  if (dialog && GTK_IS_WIDGET(dialog)) {
-    gtk_widget_destroy(dialog);
+  if (priv->location_data.progress_dialog) { /* && GTK_IS_WIDGET(dialog)) {*/
+    gtk_widget_destroy(priv->location_data.progress_dialog);
+
+    priv->location_data.progress_dialog = NULL;
   }
 
   g_free(progress_str);
@@ -2136,8 +2139,10 @@ gtk_weather_update_location_progress_bar(gpointer data)
   gint percentage = gtk_progress_bar_get_fraction(location_data->progress_bar) * 100;
 
   if ( (percentage >= 100) ||
-       (pthread_kill(*(location_data->tid), 0) == ESRCH) ) {
+       (pthread_kill(location_data->tid, 0) == ESRCH) ) {
     gtk_widget_destroy(location_data->progress_dialog);
+
+    location_data->progress_dialog = NULL;    
 
     ret = FALSE;
   } else {
