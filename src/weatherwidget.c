@@ -115,14 +115,14 @@ struct _ConditionsDialogData
 //   Only lock the mutex once the user selects the location to set --
 //   this way, once set, unlock the mutex and signal the condition variable.
 
-// @TODO: make sure the rwlock is locked on
+// @TODO: make sure the datamutex is locked on
 //     1) location set/copy
 //     2) forecast retrieval/removal
 //     3) save (?)
 
 struct _LocationThreadData
 {
-  pthread_t        tid;
+  pthread_t        thread;
   gchar          * location;
   GtkProgressBar * progress_bar;
   GtkWidget      * progress_dialog;
@@ -149,16 +149,16 @@ struct _GtkWeatherPrivate
   ConditionsDialogData  conditions_data;
   
   /* Internal data */
-  gpointer    previous_location;
-  gpointer    location;
-  gpointer    forecast;
+  gpointer  previous_location;
+  gpointer  location;
+  gpointer  forecast;
 
   /* Mutex goes with the condition variable */
-  pthread_mutex_t  mutex;
-  pthread_cond_t   cond;
+  pthread_mutex_t mutex;
+  pthread_cond_t  cond;
 
-  /* RWLock is for both the location and forecast, they're a pair */
-  pthread_rwlock_t rwlock;
+  /* This mutex is for both the location and forecast, they're a pair */
+  pthread_mutex_t datamutex;
   
   /* Data for location and forecast retrieval threads */
   LocationThreadData location_data;
@@ -370,7 +370,7 @@ gtk_weather_init(GtkWeather * weather)
       
   if (pthread_mutex_init(&(priv->mutex), NULL) ||
       pthread_cond_init(&(priv->cond), NULL) ||
-      pthread_rwlock_init(&(priv->rwlock), NULL)) {
+      pthread_mutex_init(&(priv->datamutex), NULL)) {
     LOG_ERRNO(errno,
               "gtk_weather_new(): could not initialize threading primitives.");
   }
@@ -434,18 +434,6 @@ gtk_weather_destroy(GObject * object)
 
   if (priv->menu_data.menu && GTK_IS_WIDGET(priv->menu_data.menu)) {
     gtk_widget_destroy(priv->menu_data.menu);
-  }
-
-  if (priv->hbox && GTK_IS_WIDGET(priv->hbox)) {
-    gtk_widget_destroy(priv->hbox);
-  }
-
-  if (priv->image && GTK_IS_WIDGET(priv->image)) {
-    gtk_widget_destroy(priv->image);
-  }
-
-  if (priv->label && GTK_IS_WIDGET(priv->label))  {
-    gtk_widget_destroy(priv->label);
   }
 
 }
@@ -523,7 +511,7 @@ gtk_weather_render(GtkWeather * weather)
   LXW_LOG(LXW_DEBUG, "GtkWeather::render(): location: %p, forecast: %p",
           priv->location, priv->forecast);
 
-  if (pthread_rwlock_rdlock(&(priv->rwlock)) == 0) {
+  if (pthread_mutex_lock(&(priv->datamutex)) == 0) {
     if (priv->location && priv->forecast) {
       ForecastInfo * forecast = (ForecastInfo *)priv->forecast;
 
@@ -577,7 +565,7 @@ gtk_weather_render(GtkWeather * weather)
     /* update tooltip with proper data... */
     gchar * tooltip_text = gtk_weather_get_tooltip_text(GTK_WIDGET(weather));
 
-    pthread_rwlock_unlock(&(priv->rwlock));
+    pthread_mutex_unlock(&(priv->datamutex));
 
     gtk_widget_set_tooltip_text(GTK_WIDGET(weather), tooltip_text);
 
@@ -679,7 +667,7 @@ gtk_weather_set_location(GtkWeather * weather, gpointer location, gboolean backu
   location_print(location);
 #endif
 
-  if (pthread_rwlock_wrlock(&(priv->rwlock)) == 0) {
+  if (pthread_mutex_lock(&(priv->datamutex)) == 0) {
     if (backup) {
       /* Set previous location, to save it. */
       location_copy(&priv->previous_location, priv->location);
@@ -688,7 +676,7 @@ gtk_weather_set_location(GtkWeather * weather, gpointer location, gboolean backu
     if (location) {
       location_copy(&priv->location, location);
 
-      pthread_rwlock_unlock(&(priv->rwlock));
+      pthread_mutex_unlock(&(priv->datamutex));
 
       /* reset forecast */
       gtk_weather_set_forecast(weather, NULL);
@@ -699,7 +687,7 @@ gtk_weather_set_location(GtkWeather * weather, gpointer location, gboolean backu
 
       priv->location = NULL;
 
-      pthread_rwlock_unlock(&(priv->rwlock));
+      pthread_mutex_unlock(&(priv->datamutex));
       
       gtk_weather_render(weather);
     }
@@ -739,14 +727,14 @@ gtk_weather_set_forecast(GtkWeather * weather, gpointer forecast)
   forecast_print(forecast);
 #endif
 
-  if (pthread_rwlock_wrlock(&(priv->rwlock)) == 0) {
+  if (pthread_mutex_lock(&(priv->datamutex)) == 0) {
     if (!forecast) {
       forecast_free(priv->forecast);
 
       priv->forecast = NULL;
     }
     
-    pthread_rwlock_unlock(&(priv->rwlock));
+    pthread_mutex_unlock(&(priv->datamutex));
   }
 
   gtk_weather_render(weather);
@@ -910,7 +898,7 @@ gtk_weather_change_location(GtkWidget * widget, GdkEventButton * event)
         LOG_ERRNO(ret, "pthread_attr_init");
       }
 
-      ret = pthread_create(&(priv->location_data.tid),
+      ret = pthread_create(&(priv->location_data.thread),
                            &tattr,
                            &gtk_weather_get_location_threadfunc,
                            new_location);
@@ -931,7 +919,7 @@ gtk_weather_change_location(GtkWidget * widget, GdkEventButton * event)
       gtk_weather_show_location_progress_bar(GTK_WEATHER(widget));
 
       void * result = NULL;
-      ret = pthread_join(priv->location_data.tid, &result);
+      ret = pthread_join(priv->location_data.thread, &result);
       if (ret != 0) {
         LOG_ERRNO(ret, "pthread_join");
       }
@@ -982,7 +970,7 @@ gtk_weather_change_location(GtkWidget * widget, GdkEventButton * event)
     gtk_widget_destroy(dialog);
   }
 
-  priv->location_data.tid      = 0;
+  priv->location_data.thread   = 0;
   priv->location_data.location = NULL;
      
   dialog = NULL;
@@ -1870,7 +1858,7 @@ gtk_weather_update_conditions_dialog(GtkWeather * weather)
   ForecastInfo * forecast = (ForecastInfo *)priv->forecast;
 
   if (location && forecast && data->dialog) {
-    if (pthread_rwlock_rdlock(&(priv->rwlock)) == 0) {
+    if (pthread_mutex_lock(&(priv->datamutex)) == 0) {
       gchar * location_label_text = g_strconcat((location->city_)?location->city_:"",
                                                 (location->city_)?", ":"",
                                                 (location->state_)?location->state_:"",
@@ -1956,7 +1944,7 @@ gtk_weather_update_conditions_dialog(GtkWeather * weather)
 
       g_object_unref(icon_buf);
 
-      pthread_rwlock_unlock(&(priv->rwlock));
+      pthread_mutex_unlock(&(priv->datamutex));
     }
 
   }
@@ -2014,11 +2002,11 @@ gtk_weather_run_conditions_dialog(GtkWidget * widget)
   } else if (!forecast && location) {
     gchar * error_msg = NULL;
 
-    if (pthread_rwlock_rdlock(&(priv->rwlock)) == 0) {
+    if (pthread_mutex_lock(&(priv->datamutex)) == 0) {
       error_msg = g_strdup_printf(_("Forecast for %s unavailable."),
                                   location->alias_);
 
-      pthread_rwlock_unlock(&(priv->rwlock));
+      pthread_mutex_unlock(&(priv->datamutex));
     }
 
     gtk_weather_run_error_dialog(NULL, (error_msg) ? error_msg : "FAIL!");
@@ -2082,8 +2070,8 @@ gtk_weather_show_location_progress_bar(GtkWeather * weather)
     break;
 
   case GTK_RESPONSE_CANCEL:
-    if (pthread_kill(priv->location_data.tid, 0) != ESRCH) {
-      int ret = pthread_cancel(priv->location_data.tid);
+    if (pthread_kill(priv->location_data.thread, 0) != ESRCH) {
+      int ret = pthread_cancel(priv->location_data.thread);
 
       if (ret != 0) {
         LOG_ERRNO(ret, "pthread_cancel");
@@ -2139,7 +2127,7 @@ gtk_weather_update_location_progress_bar(gpointer data)
   gint percentage = gtk_progress_bar_get_fraction(location_data->progress_bar) * 100;
 
   if ( (percentage >= 100) ||
-       (pthread_kill(location_data->tid, 0) == ESRCH) ) {
+       (pthread_kill(location_data->thread, 0) == ESRCH) ) {
     gtk_widget_destroy(location_data->progress_dialog);
 
     location_data->progress_dialog = NULL;    
@@ -2650,13 +2638,16 @@ gtk_weather_get_forecast_threadfunc(void * arg)
 
     /* write lock */
     LXW_LOG(LXW_DEBUG, "\tabout to writelock");
-    if (pthread_rwlock_wrlock(&(priv->rwlock)) == 0) {
+    if (pthread_mutex_lock(&(priv->datamutex)) == 0) {
+      location = (LocationInfo *) priv->location;
+
       LXW_LOG(LXW_DEBUG, "\tgetting forecast for %s", location->woeid_);
+
       yahooutil_forecast_get(location->woeid_,
                              location->units_, 
                              &(priv->forecast));
 
-      pthread_rwlock_unlock(&(priv->rwlock));
+      pthread_mutex_unlock(&(priv->datamutex));
 
       /* render on main thread */
       g_idle_add(gtk_weather_update_ui, weather);
