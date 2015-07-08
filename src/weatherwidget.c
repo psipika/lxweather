@@ -1595,7 +1595,8 @@ gtk_weather_create_conditions_dialog(GtkWeather * weather)
           ((data && data->shown)  ? "SHOWN":
            (data && !data->shown) ? "HIDDEN" : "NULL"));
 
-  if (data->shown) {
+  /* clang --analyze complains that data may be null, hence the check */
+  if (!data || data->shown) {
     return;
   }
 
@@ -1901,8 +1902,8 @@ gtk_weather_update_conditions_dialog(GtkWeather * weather)
           ((data && data->shown)  ? "SHOWN":
            (data && !data->shown) ? "HIDDEN" : "NULL"));
 
-  LocationInfo * location = (LocationInfo *)priv->location;
-  ForecastInfo * forecast = (ForecastInfo *)priv->forecast;
+  LocationInfo * location = (LocationInfo *) (priv) ? priv->location : NULL;
+  ForecastInfo * forecast = (ForecastInfo *) (priv) ? priv->forecast : NULL;
 
   if (location && forecast && data->dialog) {
     if (pthread_rwlock_rdlock(&(priv->rwlock)) == 0) {
@@ -2020,6 +2021,7 @@ gtk_weather_run_conditions_dialog(GtkWidget * widget)
   ForecastInfo * forecast = NULL;
   const gchar  * alias    = NULL;
 
+  /* clang --analyze complains that priv may be null, not sure how, though */
   if (pthread_rwlock_rdlock(&(priv->rwlock)) == 0) {
     location = (LocationInfo *)priv->location;
     forecast = (ForecastInfo *)priv->forecast;
