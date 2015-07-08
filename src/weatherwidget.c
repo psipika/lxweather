@@ -2024,7 +2024,8 @@ gtk_weather_run_conditions_dialog(GtkWidget * widget)
     location = (LocationInfo *)priv->location;
     forecast = (ForecastInfo *)priv->forecast;
 
-    alias = location->alias_; /* for the error message */
+    /* for the error message */
+    alias = (location) ? location->alias_ : _("N/A");
 
     pthread_rwlock_unlock(&(priv->rwlock));
   }
@@ -2302,6 +2303,7 @@ gtk_weather_show_location_list(GtkWeather * weather, GList * list)
 
   /* Set the model behind the tree view, and forget about it */
   gtk_tree_view_set_model(GTK_TREE_VIEW(treeview), GTK_TREE_MODEL(list_store));
+
   g_object_unref(list_store);
 
   GtkTreeSelection * selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(treeview));
@@ -2336,9 +2338,16 @@ gtk_weather_show_location_list(GtkWeather * weather, GList * list)
 
       LocationInfo * location = g_list_nth_data(list, index);
 
+      /* I could achieve the same effect by calling g_object_set_property
+       * on the weather widget, but it requires an additional
+       * GValue allocation.  I'd rather just execute the call explicitly
+       */
       gtk_weather_set_location(weather, (gpointer)location, TRUE);
-      /* list of locations is released by the caller */
 
+      /* This function will only start the thread if it isn't 'active'. */
+      gtk_weather_forecast_thread_start(weather);
+
+      /* list of locations is released by the caller */
       /* preferences dialog is also repainted by caller */
       g_free(path);
     }
@@ -2521,6 +2530,8 @@ gtk_weather_forecast_thread_start(GtkWeather * weather)
                           weather);
 
       if (rc) {
+        ftdata->active = 0;
+
         LOG_ERRNO(errno, "pthread_create()");
       }
     }
