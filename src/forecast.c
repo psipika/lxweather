@@ -28,16 +28,16 @@
 
 /**
  * Provides the mechanism to free any data associated with 
- * the Forecast structure
+ * the ForecastDay structure
  *
- * @param forecast Entry to free.
+ * @param day Entry to free.
  *
  */
 static void
-freeForecastForecast(Forecast * forecast)
+forecast_forecastday_free(ForecastDay * day)
 {
-  g_free(forecast->day_);
-  g_free(forecast->conditions_);
+  g_free(day->day_);
+  g_free(day->conditions_);
 }
 
 /**
@@ -48,7 +48,7 @@ freeForecastForecast(Forecast * forecast)
  *
  */
 static void
-freeForecastUnits(ForecastUnits * units)
+forecast_units_free(ForecastUnits * units)
 {
   g_free(units->distance_);
   g_free(units->pressure_);
@@ -64,31 +64,31 @@ freeForecastUnits(ForecastUnits * units)
  *
  */
 void
-freeForecast(gpointer forecast)
+forecast_free(gpointer forecast)
 {
-  if (!forecast)
-    {
-      return;
-    }
+  if (!forecast) {
+    return;
+  }
 
   ForecastInfo * info = (ForecastInfo *)forecast;
 
-  freeForecastUnits(&info->units_);
+  forecast_units_free(&info->units_);
 
-  freeForecastForecast(&info->today_);
-  freeForecastForecast(&info->tomorrow_);
+  int i = 0;
+  for (; i < FORECAST_MAX_DAYS; i++) {
+    forecast_forecastday_free(&(info->days_[i]));
+  }
 
   g_free(info->windDirection_);
   g_free(info->sunrise_);
   g_free(info->sunset_);
-  g_free(info->time_);
   g_free(info->conditions_);
+  g_free(info->time_);
   g_free(info->imageURL_);
   
-  if (info->image_)
-    {
-      g_object_unref(info->image_);
-    }
+  if (info->image_) {
+    g_object_unref(info->image_);
+  }
 
   g_free(forecast);
 }
@@ -100,15 +100,14 @@ freeForecast(gpointer forecast)
  *
  */
 void
-printForecast(gpointer forecast G_GNUC_UNUSED)
+forecast_print(gpointer forecast G_GNUC_UNUSED)
 {
 #ifdef DEBUG
-  if (!forecast)
-    {
-      LXW_LOG(LXW_ERROR, "forecast::printForecast(): Entry: NULL");
-      
-      return;
-    }
+  if (!forecast) {
+    LXW_LOG(LXW_ERROR, "forecast::printForecast(): Entry: NULL");
+
+    return;
+  }
   
   ForecastInfo * info = (ForecastInfo *)forecast;
   
@@ -138,20 +137,20 @@ printForecast(gpointer forecast G_GNUC_UNUSED)
   LXW_LOG(LXW_VERBOSE, "\tSunset: %s", (const char *)info->sunset_);
   LXW_LOG(LXW_VERBOSE, "\tImage URL: %s", info->imageURL_);
 
-  LXW_LOG(LXW_VERBOSE, "\tTwo-day forecast:");
-  LXW_LOG(LXW_VERBOSE, "\t\t%s: High: %d%s, Low: %d%s, Conditions: %s",
-          (const char *)info->today_.day_,
-          info->today_.high_,
+  LXW_LOG(LXW_VERBOSE, "\t%d-day forecast:", FORECAST_MAX_DAYS);
+
+  int i = 0;
+  for (; i <
+         FORECAST_MAX_DAYS; i++) {
+    LXW_LOG(LXW_VERBOSE, "\t\t%s: High: %d%s, Low: %d%s, Conditions[%d]: %s",
+          (const char *)info->days_[i].day_,
+                        info->days_[i].high_,
           (const char *)info->units_.temperature_,
-          info->today_.low_,
+                        info->days_[i].low_,
           (const char *)info->units_.temperature_,
-          (const char *)info->today_.conditions_);
-  LXW_LOG(LXW_VERBOSE, "\t\t%s: High: %d%s, Low: %d%s, Conditions: %s",
-          (const char *)info->tomorrow_.day_,
-          info->tomorrow_.high_,
-          (const char *)info->units_.temperature_,
-          info->tomorrow_.low_,
-          (const char *)info->units_.temperature_,
-          (const char *)info->tomorrow_.conditions_);
+                        info->days_[i].code_,
+          (const char *)info->days_[i].conditions_);
+  }
+
 #endif
 }

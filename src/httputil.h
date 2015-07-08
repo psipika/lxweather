@@ -38,6 +38,6 @@ static const gint HTTP_STATUS_OK = 200;
  *         representation of the response. Must be freed by the caller.
  */
 gpointer
-getURL(const gchar * url, gint * rc, gint * datalen);
+httputil_url_get(const gchar * url, gint * rc, gint * datalen);
 
 #endif

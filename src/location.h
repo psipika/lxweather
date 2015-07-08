@@ -68,7 +68,7 @@ extern const gchar * LocationInfoFieldNames[];
  *
  */
 void
-freeLocation(gpointer location);
+location_free(gpointer location);
 
 /**
  * Prints the contents of the supplied entry to stdout
@@ -77,17 +77,21 @@ freeLocation(gpointer location);
  *
  */
 void
-printLocation(gpointer location);
+location_print(gpointer location);
 
 /**
- * Sets the alias for the location
+ * Sets the given property for the location
  *
- * @param location Pointer to the location to modify
- * @param alias    Alias value to use
- *
+ * @param location Pointer to the location to modify.
+ * @param property Name of the property to set.
+ * @param value    Value to assign to the property.
+ * @param len      Length of the value to assign to the property (think strlen())
  */
 void
-setLocationAlias(gpointer location, gpointer alias);
+location_property_set(gpointer      location,
+                      const gchar * property,
+                      const gchar * value,
+                      gsize         len);
 
 /**
  * Copies a location entry.
@@ -100,6 +104,6 @@ setLocationAlias(gpointer location, gpointer alias);
  *       the caller.
  */
 void
-copyLocation(gpointer * dst, gpointer src);
+location_copy(gpointer * dst, gpointer src);
 
 #endif

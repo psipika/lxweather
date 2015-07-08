@@ -43,7 +43,7 @@ static int g_fd = -1; /* -1 is syslog, 0 is std{out|err} */
  *             or 'syslog' for syslog)
  */
 void 
-initializeLogUtil(const char * path)
+logutil_init(const char * path)
 {
 #ifndef DEBUG
   return;
@@ -100,7 +100,7 @@ initializeLogUtil(const char * path)
  *
  */
 void 
-cleanupLogUtil()
+logutil_cleanup()
 {
 #ifndef DEBUG
   return;
@@ -135,7 +135,7 @@ cleanupLogUtil()
  * @param msg Message to log
  */
 void 
-logUtil(LXWEATHER_LOGLEVEL level, const char * msg, ...)
+logutil_log(LXWEATHER_LOGLEVEL level, const char * msg, ...)
 {
 #ifndef DEBUG
   return;
@@ -182,7 +182,9 @@ logUtil(LXWEATHER_LOGLEVEL level, const char * msg, ...)
           else
             {
               /* write to file */
-              (void) write(g_fd, buf, bufsz); /* to prevent compile warning */
+              size_t foo = write(g_fd, buf, bufsz);
+
+              (void) foo;
             }
         }
            
@@ -200,7 +202,7 @@ logUtil(LXWEATHER_LOGLEVEL level, const char * msg, ...)
  * @return Previous value of the maximum log level.
  */
 LXWEATHER_LOGLEVEL 
-setMaxLogLevel(LXWEATHER_LOGLEVEL level)
+logutil_max_loglevel_set(LXWEATHER_LOGLEVEL level)
 {
 #ifndef DEBUG
   return g_level;

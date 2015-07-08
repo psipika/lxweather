@@ -72,7 +72,7 @@ sighandler(int signal)
 }
 
 /* long options */
-static struct option longOptions[] =
+static struct option longopts[] =
 {
   {"help", 0, NULL, 1},
   {"config", 1, NULL, 2},
@@ -89,20 +89,20 @@ typedef struct
 } WeatherWidgetEntry;
 
 /* List with WeatherWidgetEntry entries */
-static GList * pWidgetEntryList = NULL;
+static GList * g_widgetentrylist = NULL;
 
 static gpointer entry_find(const GtkWeather * pWeather);
 
 /**
  * Prints out the usage help text.
  *
- * @param pczProgName Pointer to the character constant with the name
- *                    of the executable being ran.
+ * @param progname Pointer to the character constant with the name
+ *                 of the executable being ran.
  */
 static void
-usage(const char *pczProgName)
+usage(const char *progname)
 {
-  fprintf(stderr, "Usage: %s [OPTIONs]\n", pczProgName);
+  fprintf(stderr, "Usage: %s [OPTIONs]\n", progname);
   fprintf(stderr, "Where OPTIONs is one or more of the following:\n");
   fprintf(stderr, "  -c|--config   Specify configuration file [Default: $HOME/.config/" APP_NAME "/config].\n");
   fprintf(stderr, "  -f|--logfile  Specify file location to write to. Acceptable values: \n");
@@ -126,18 +126,16 @@ static void
 location_changed(GtkWeather * weather, gpointer location, gpointer data)
 {
   /* To avoid compilation warning */
-  (void)weather;
+  (void) weather;
 
-  WeatherWidgetEntry * pEntry = (WeatherWidgetEntry *)data; //entry_find(weather);
+  WeatherWidgetEntry * entry = (WeatherWidgetEntry *)data; //entry_find(weather);
 
   LXW_LOG(LXW_DEBUG, "main::location_changed: %p, %p, %p, %p", 
-          location, pEntry, (pEntry)?pEntry->widget_:NULL, data);
+          location, entry, (entry)?entry->widget_:NULL, data);
 
-  if (pEntry)
-    {
-      gtk_status_icon_set_from_stock(pEntry->icon_, GTK_STOCK_DIALOG_WARNING);
-    }
-
+  if (entry) {
+    gtk_status_icon_set_from_stock(entry->icon_, GTK_STOCK_DIALOG_WARNING);
+  }
 }
 
 /**
@@ -150,43 +148,39 @@ location_changed(GtkWeather * weather, gpointer location, gpointer data)
 static void
 forecast_changed(GtkWeather * weather, gpointer forecast, gpointer data)
 {
-  WeatherWidgetEntry * pEntry = (WeatherWidgetEntry *)data; //entry_find(weather);
+  WeatherWidgetEntry * entry = (WeatherWidgetEntry *)data; //entry_find(weather);
 
   LXW_LOG(LXW_DEBUG, "main::forecast_changed: %p, %p, %p", 
-          forecast, pEntry, (pEntry)?pEntry->widget_:NULL);
+          forecast, entry, (entry)?entry->widget_:NULL);
   
-  if (pEntry)
-    {
-      if (forecast)
-        {
-          LXW_LOG(LXW_ERROR, "Setting status icon.");
-          gtk_status_icon_set_from_pixbuf(pEntry->icon_,
-                                          ((ForecastInfo *)forecast)->image_);
-        }
-      else
-        {
-          LXW_LOG(LXW_ERROR, "Setting status icon STOCK.");
-          gtk_status_icon_set_from_stock(pEntry->icon_,
-                                         GTK_STOCK_DIALOG_WARNING);
-        }
-
-      LXW_LOG(LXW_ERROR, "Getting status tooltip.");
-      gchar * tooltip_text = gtk_weather_get_tooltip_text(GTK_WIDGET(weather));
-
-      LXW_LOG(LXW_ERROR, "Setting status tooltip.");
-      gtk_status_icon_set_tooltip_text(pEntry->icon_, tooltip_text);
-
-      LXW_LOG(LXW_ERROR, "Setting icon visible %d, %d.", 
-              gtk_status_icon_get_visible(pEntry->icon_),
-              gtk_status_icon_is_embedded(pEntry->icon_));
-
-      //gtk_status_icon_set_visible(pEntry->icon_, TRUE);
-
-      LXW_LOG(LXW_ERROR, "free tooltip.");
-      g_free(tooltip_text);
+  if (entry) {
+    if (forecast) {
+      LXW_LOG(LXW_DEBUG, "Setting status icon.");
+      gtk_status_icon_set_from_pixbuf(entry->icon_,
+                                      ((ForecastInfo *)forecast)->image_);
+    } else {
+      LXW_LOG(LXW_DEBUG, "Setting status icon STOCK.");
+      gtk_status_icon_set_from_stock(entry->icon_,
+                                     GTK_STOCK_DIALOG_WARNING);
     }
 
-  LXW_LOG(LXW_ERROR, "...Done.");  
+    LXW_LOG(LXW_DEBUG, "Getting status tooltip.");
+    gchar * tooltip_text = gtk_weather_get_tooltip_text(GTK_WIDGET(weather));
+
+    LXW_LOG(LXW_DEBUG, "Setting status tooltip.");
+    gtk_status_icon_set_tooltip_text(entry->icon_, tooltip_text);
+
+    LXW_LOG(LXW_DEBUG, "Setting icon visible %d, %d.",
+            gtk_status_icon_get_visible(entry->icon_),
+            gtk_status_icon_is_embedded(entry->icon_));
+
+    //gtk_status_icon_set_visible(entry->icon_, TRUE);
+
+    LXW_LOG(LXW_DEBUG, "free tooltip.");
+    g_free(tooltip_text);
+  }
+
+  LXW_LOG(LXW_DEBUG, "...Done.");
 }
 
 /**
@@ -237,43 +231,42 @@ icon_popup_menu(GtkStatusIcon * icon, guint button, guint time, gpointer data)
 static gpointer
 entry_new()
 {
-  WeatherWidgetEntry * pEntry = (WeatherWidgetEntry *) g_try_new0(WeatherWidgetEntry, 1);
+  WeatherWidgetEntry * entry = (WeatherWidgetEntry *) g_try_new0(WeatherWidgetEntry, 1);
 
-  if (pEntry)
-    {
-      GtkWidget * pWeather = gtk_weather_new(TRUE);
+  if (entry) {
+    GtkWidget * weather = gtk_weather_new();
 
-      g_object_ref_sink(pWeather);
+    g_object_ref_sink(weather);
 
-      g_signal_connect(G_OBJECT(pWeather),
-                       "location-changed",
-                       G_CALLBACK(location_changed),
-                       (gpointer)pEntry);
+    g_signal_connect(G_OBJECT(weather),
+                     "location-changed",
+                     G_CALLBACK(location_changed),
+                     (gpointer)entry);
       
-      g_signal_connect(G_OBJECT(pWeather),
-                       "forecast-changed",
-                       G_CALLBACK(forecast_changed),
-                       (gpointer)pEntry);
+    g_signal_connect(G_OBJECT(weather),
+                     "forecast-changed",
+                     G_CALLBACK(forecast_changed),
+                     (gpointer)entry);
       
-      GtkStatusIcon * pStatusIcon = gtk_status_icon_new_from_stock(GTK_STOCK_DIALOG_ERROR);
+    GtkStatusIcon * icon = gtk_status_icon_new_from_stock(GTK_STOCK_DIALOG_ERROR);
 
-      g_object_ref_sink(pStatusIcon);
+    g_object_ref_sink(icon);
 
-      g_signal_connect(G_OBJECT(pStatusIcon),
-                       "activate",
-                       G_CALLBACK(icon_activate),
-                       (gpointer)pWeather);
+    g_signal_connect(G_OBJECT(icon),
+                     "activate",
+                     G_CALLBACK(icon_activate),
+                     (gpointer)weather);
       
-      g_signal_connect(G_OBJECT(pStatusIcon),
-                       "popup-menu",
-                       G_CALLBACK(icon_popup_menu),
-                       (gpointer)pWeather);
+    g_signal_connect(G_OBJECT(icon),
+                     "popup-menu",
+                     G_CALLBACK(icon_popup_menu),
+                     (gpointer)weather);
 
-      pEntry->widget_ = GTK_WEATHER(pWeather);
-      pEntry->icon_   = pStatusIcon;
-    }
+    entry->widget_ = GTK_WEATHER(weather);
+    entry->icon_   = icon;
+  }
 
-  return pEntry;
+  return entry;
 }
 
 /**
@@ -284,122 +277,115 @@ entry_new()
 static void
 entry_free(gpointer entry)
 {
-  if (entry)
-    {
-      WeatherWidgetEntry * pObj = (WeatherWidgetEntry *)entry;
+  if (entry) {
+    WeatherWidgetEntry * pObj = (WeatherWidgetEntry *)entry;
 
-      LXW_LOG(LXW_DEBUG, "Destroying weather widget.");
+    LXW_LOG(LXW_DEBUG, "Destroying weather widget.");
 
-      g_object_unref(pObj->widget_);
-      g_object_unref(pObj->icon_);
+    g_object_unref(pObj->widget_);
+    g_object_unref(pObj->icon_);
       
-      g_free(entry);
-    }
+    g_free(entry);
+  }
 }
 
 /**
  * Finds the entry with the specified widget
  *
- * @param pWeather Pointer to the Weather widget to find in the list.
+ * @param weather Pointer to the Weather widget to find in the list.
  *
  * @return the entry containing the specified widget pointer, or NULL
  *         if not found
  */
 static gpointer
-entry_find(const GtkWeather * pWeather)
+entry_find(const GtkWeather * weather)
 {
-  gpointer pRetVal = NULL;
+  gpointer retval = NULL;
 
-  GList * iter = g_list_first(pWidgetEntryList);
+  GList * iter = g_list_first(g_widgetentrylist);
 
-  while (iter)
-    {
-      WeatherWidgetEntry * pEntry = (WeatherWidgetEntry *) iter->data;
+  while (iter) {
+    WeatherWidgetEntry * entry = (WeatherWidgetEntry *) iter->data;
 
-      if (pEntry && pEntry->widget_ == pWeather)
-        {
-          pRetVal = pEntry;
+    if (entry && entry->widget_ == weather) {
+      retval = entry;
 
-          break;
-        }
-
-      iter = g_list_next(iter);
+      break;
     }
 
-  return pRetVal;
+    iter = g_list_next(iter);
+  }
+
+  return retval;
 }
 
 /* -- main -- */
 int
 main(int argc, char **argv)
 {
-  int iIndex = 0;
-  int iRetVal = 0;
+  int optindx = 0;
+  int rc      = 0;
 
-  gchar * pcConfiguration = NULL;
-  gchar * pcLogFile = NULL;
-  gint  iLogLevel = LXW_NONE;
+  gchar * config   = NULL;
+  gchar * logfile  = NULL;
+  gint    loglevel = LXW_NONE;
   
-  while ((iRetVal = getopt_long(argc, argv, "c:hf:l:", longOptions, &iIndex)) != -1)
-    {
-      switch (iRetVal)
-        {
-        case 1:
-        case 'h':
-          usage(argv[0]);
+  while ((rc = getopt_long(argc, argv, "c:hf:l:", longopts, &optindx)) != -1) {
+    switch (rc) {
+    case 1:
+    case 'h':
+      usage(argv[0]);
 
-          exit(0);
+      exit(0);
 
-        case 2:
-        case 'c':
-          pcConfiguration = g_strndup(optarg, strlen(optarg));
-          break;
+    case 2:
+    case 'c':
+      config = g_strndup(optarg, strlen(optarg));
+      break;
 
 
-        case 3:
-        case 'f':
-          pcLogFile = g_strndup(optarg, strlen(optarg));
-          break;
+    case 3:
+    case 'f':
+      logfile = g_strndup(optarg, strlen(optarg));
+      break;
           
-        case 4:
-        case 'l':
-          iLogLevel = (int)strtol(optarg, NULL, 10);
+    case 4:
+    case 'l':
+      loglevel = (int)strtol(optarg, NULL, 10);
 
-          if (iLogLevel < LXW_NONE || iLogLevel > LXW_ALL)
-            {
-              iLogLevel = LXW_NONE;
-            }
+      if (loglevel < LXW_NONE || loglevel > LXW_ALL) {
+        loglevel = LXW_NONE;
+      }
 
-          break;
+      break;
 
-        default:
-          /* Unhandled */
-          usage(argv[0]);
+    default:
+      /* Unhandled */
+      usage(argv[0]);
 
-          exit(1);
+      exit(1);
 
-          break;
-        }
+      break;
     }
+  }
 
-  initializeLogUtil(pcLogFile);
+  logutil_init(logfile);
 
-  setMaxLogLevel(iLogLevel);
+  logutil_max_loglevel_set(loglevel);
 
-  g_free(pcLogFile);
+  g_free(logfile);
 
-  LXW_LOG(LXW_DEBUG, "Configuration option: %s", pcConfiguration);
+  LXW_LOG(LXW_DEBUG, "Configuration option: %s", config);
 
-  if (!pcConfiguration)
-    {
-      pcConfiguration = g_strdup_printf("%s%s%s%sconfig", 
-                                        g_get_user_config_dir(),
-                                        G_DIR_SEPARATOR_S,
-                                        APP_NAME,
-                                        G_DIR_SEPARATOR_S);
-    }
+  if (!config) {
+    config = g_strdup_printf("%s%s%s%sconfig", 
+                             g_get_user_config_dir(),
+                             G_DIR_SEPARATOR_S,
+                             APP_NAME,
+                             G_DIR_SEPARATOR_S);
+  }
 
-  LXW_LOG(LXW_DEBUG, "Effective configuration: %s", pcConfiguration);
+  LXW_LOG(LXW_DEBUG, "Effective configuration: %s", config);
 
   /* setup our own signal handling for terminating signals */
   signal(SIGINT, sighandler);
@@ -409,111 +395,105 @@ main(int argc, char **argv)
   gtk_init(&argc, &argv);
 
   /* do some magic here */
-  initializeYahooUtil();
+  yahooutil_init();
 
-  GList * pList = getLocationsFromConfiguration(pcConfiguration);
+  GList * list = fileutil_config_locations_load(config);
 
-  LXW_LOG(LXW_DEBUG, "Size of configured list: %u", g_list_length(pList));
+  LXW_LOG(LXW_DEBUG, "Size of configured list: %u", g_list_length(list));
 
   /* Initialize entry one per configured location*/
-  if (g_list_length(pList))
-    {
-      GList * iter = g_list_first(pList);
+  if (g_list_length(list)) {
+    GList * iter = g_list_first(list);
 
-      while (iter)
-        {
-          /* Create entry */
-          WeatherWidgetEntry * pEntry = entry_new();
+    while (iter) {
+      /* Create entry */
+      WeatherWidgetEntry * entry = entry_new();
 
-          if (pEntry)
-            {
-              pWidgetEntryList = g_list_append(pWidgetEntryList, pEntry);
+      if (entry) {
+        g_widgetentrylist = g_list_append(g_widgetentrylist, entry);
 
-              /* set location based on config file entry */
-              GValue location = G_VALUE_INIT;
-              g_value_init(&location, G_TYPE_POINTER);
+        /* set location based on config file entry */
+        GValue location = G_VALUE_INIT;
+        g_value_init(&location, G_TYPE_POINTER);
               
-              LocationInfo * pInfo = iter->data;
+        LocationInfo * info = iter->data;
 
-              g_value_set_pointer(&location, pInfo);
+        g_value_set_pointer(&location, info);
               
-              g_object_set_property(G_OBJECT(pEntry->widget_),
-                                    "location",
-                                    &location);
-            }
+        g_object_set_property(G_OBJECT(entry->widget_),
+                              "location",
+                              &location);
+      }
 
-          iter = g_list_next(iter);
-        }
+      iter = g_list_next(iter);
     }
-  else
-    {
-      /* No entries means no location and no forecast */
-      WeatherWidgetEntry * pEntry = entry_new();
+  } else {
+    /* No entries means no location and no forecast */
+    WeatherWidgetEntry * entry = entry_new();
 
-      if (pEntry)
-        {
-          pWidgetEntryList = g_list_append(pWidgetEntryList, pEntry);
+    if (entry) {
+      g_widgetentrylist = g_list_append(g_widgetentrylist, entry);
 
-          forecast_changed(GTK_WEATHER(pEntry->widget_), NULL, pEntry);
-        }
+      /* this call will update the status icon accordingly */
+      forecast_changed(GTK_WEATHER(entry->widget_), NULL, entry);
     }
+  }
 
   /* Free location list from configuration */
-  g_list_free_full(pList, freeLocation);
+  g_list_free_full(list, location_free);
 
-  pList = NULL;
+  list = NULL;
 
   /* Rearrange our entry list */
-  pWidgetEntryList = g_list_reverse(pWidgetEntryList);
+  g_widgetentrylist = g_list_reverse(g_widgetentrylist);
 
-  LXW_LOG(LXW_DEBUG, "Size of widget entrylist: %d", g_list_length(pWidgetEntryList));
+  LXW_LOG(LXW_DEBUG,
+          "Size of widget entrylist: %d",
+          g_list_length(g_widgetentrylist));
 
   /* GTK main loop */
   gtk_main();
 
   /* one entry to save per widget's location */
-  GList * iter = g_list_first(pWidgetEntryList);
+  GList * iter = g_list_first(g_widgetentrylist);
 
-  while (iter)
-    {
-      WeatherWidgetEntry * pEntry = iter->data;
+  while (iter) {
+    WeatherWidgetEntry * entry = iter->data;
 
-      GValue location = G_VALUE_INIT;
-      g_value_init(&location, G_TYPE_POINTER);
+    GValue location = G_VALUE_INIT;
+    g_value_init(&location, G_TYPE_POINTER);
 
-      g_object_get_property(G_OBJECT(pEntry->widget_),
-                        "location",
-                        &location);
+    g_object_get_property(G_OBJECT(entry->widget_),
+                          "location",
+                          &location);
 
-      pList = g_list_prepend(pList, g_value_get_pointer(&location));
+    list = g_list_prepend(list, g_value_get_pointer(&location));
 
-      iter = g_list_next(iter);
-    }
+    iter = g_list_next(iter);
+  }
 
-  LXW_LOG(LXW_DEBUG, "Length of save list: %d", g_list_length(pList));
+  LXW_LOG(LXW_DEBUG, "Length of save list: %d", g_list_length(list));
 
-  if (g_list_length(pList))
-    {
-      saveLocationsToConfiguration(pList, pcConfiguration);
-    }
+  if (g_list_length(list)) {
+    fileutil_config_locations_save(list, config);
+  }
 
-  /* The list does NOT own the data in each entry,
-   * no reason to free_full */
-  g_list_free(pList);
+  /* The local list does NOT own the data in each entry, do not free_full */
+  g_list_free(list);
 
-  pList = NULL;
+  list = NULL;
 
-  g_list_free_full(pWidgetEntryList, entry_free);
+  g_list_free_full(g_widgetentrylist, entry_free);
 
-  pWidgetEntryList = NULL;
+  g_widgetentrylist = NULL;
 
-  g_free(pcConfiguration);
+  g_free(config);
 
-  cleanupYahooUtil();
+  yahooutil_cleanup();
 
   LXW_LOG(LXW_DEBUG, "Done.");
 
-  cleanupLogUtil();
+  logutil_cleanup();
 
   return EXIT_SUCCESS;
 }

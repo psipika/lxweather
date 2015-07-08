@@ -39,13 +39,13 @@ typedef enum
  * @param path Path to a file to log to (can be NULL for std{out|err},
  *                or 'syslog' for syslog)
  */
-void initializeLogUtil(const char * path);
+void logutil_init(const char * path);
 
 /**
  * Cleans up the logging subsystem
  *
  */
-void cleanupLogUtil();
+void logutil_cleanup();
 
 /**
  * Logs the message using the specified level.
@@ -53,7 +53,7 @@ void cleanupLogUtil();
  * @param level The level to log at
  * @param msg   Message to log
  */
-void logUtil(LXWEATHER_LOGLEVEL level, const char * msg, ...);
+void logutil_log(LXWEATHER_LOGLEVEL level, const char * msg, ...);
 
 /**
  * Sets the maximum allowed log level
@@ -62,10 +62,10 @@ void logUtil(LXWEATHER_LOGLEVEL level, const char * msg, ...);
  *
  * @return Previous value of the maximum log level.
  */
-LXWEATHER_LOGLEVEL setMaxLogLevel(LXWEATHER_LOGLEVEL level);
+LXWEATHER_LOGLEVEL logutil_max_loglevel_set(LXWEATHER_LOGLEVEL level);
 
 #ifdef DEBUG
-#define LXW_LOG(level, fmt, args...) logUtil(level, fmt, ##args)
+#define LXW_LOG(level, fmt, args...) logutil_log(level, fmt, ##args)
 #else
 #define LXW_LOG(level, fmt, args...)
 #endif

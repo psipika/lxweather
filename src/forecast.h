@@ -44,11 +44,21 @@
   (x>304  && x<=326)?"NW":  \
   (x>326  && x<=349)?"NNW":"")
 
+enum
+{
+  FORECAST_DAY_1    = 0,
+  FORECAST_DAY_2    = 1,
+  FORECAST_DAY_3    = 2,
+  FORECAST_DAY_4    = 3,
+  FORECAST_DAY_5    = 4,
+  FORECAST_MAX_DAYS = 5
+};
+
 typedef enum
 {
-  STEADY, // 0
-  RISING, // 1
-  FALLING // 2
+  STEADY    = 0,
+  RISING    = 1,
+  FALLING   = 2
 } PressureState;
 
 typedef struct
@@ -56,8 +66,9 @@ typedef struct
   gchar * day_;
   gint    high_;
   gint    low_;
+  gint    code_;
   gchar * conditions_;
-} Forecast;
+} ForecastDay;
 
 typedef struct
 {
@@ -71,8 +82,7 @@ typedef struct
 {
   ForecastUnits units_;
   PressureState pressureState_;
-  Forecast      today_;
-  Forecast      tomorrow_;
+  ForecastDay   days_[FORECAST_MAX_DAYS];
   gint     windChill_;
   gchar *  windDirection_;
   gint     windSpeed_;
@@ -96,7 +106,7 @@ typedef struct
  *
  */
 void
-freeForecast(gpointer forecast);
+forecast_free(gpointer forecast);
 
 /**
  * Prints the contents of the supplied entry to stdout
@@ -105,6 +115,6 @@ freeForecast(gpointer forecast);
  *
  */
 void
-printForecast(gpointer forecast);
+forecast_print(gpointer forecast);
 
 #endif
