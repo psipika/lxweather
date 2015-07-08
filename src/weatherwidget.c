@@ -157,8 +157,8 @@ struct _GtkWeatherPrivate
   pthread_mutex_t mutex;
   pthread_cond_t  cond;
 
-  /* This mutex is for both the location and forecast, they're a pair */
-  pthread_mutex_t datamutex;
+  /* This rwlock is for both the location and forecast, they're a pair */
+  pthread_rwlock_t rwlock;
   
   /* Data for location and forecast retrieval threads */
   LocationThreadData location_data;
@@ -370,7 +370,7 @@ gtk_weather_init(GtkWeather * weather)
       
   if (pthread_mutex_init(&(priv->mutex), NULL) ||
       pthread_cond_init(&(priv->cond), NULL) ||
-      pthread_mutex_init(&(priv->datamutex), NULL)) {
+      pthread_rwlock_init(&(priv->rwlock), NULL)) {
     LOG_ERRNO(errno,
               "gtk_weather_new(): could not initialize threading primitives.");
   }
@@ -436,6 +436,9 @@ gtk_weather_destroy(GObject * object)
     gtk_widget_destroy(priv->menu_data.menu);
   }
 
+  pthread_mutex_destroy(&(priv->mutex));
+  pthread_cond_destroy(&(priv->cond));
+  pthread_rwlock_destroy(&(priv->rwlock));
 }
 
 /**
@@ -511,7 +514,7 @@ gtk_weather_render(GtkWeather * weather)
   LXW_LOG(LXW_DEBUG, "GtkWeather::render(): location: %p, forecast: %p",
           priv->location, priv->forecast);
 
-  if (pthread_mutex_lock(&(priv->datamutex)) == 0) {
+  if (pthread_rwlock_rdlock(&(priv->rwlock)) == 0) {
     if (priv->location && priv->forecast) {
       ForecastInfo * forecast = (ForecastInfo *)priv->forecast;
 
@@ -565,7 +568,7 @@ gtk_weather_render(GtkWeather * weather)
     /* update tooltip with proper data... */
     gchar * tooltip_text = gtk_weather_get_tooltip_text(GTK_WIDGET(weather));
 
-    pthread_mutex_unlock(&(priv->datamutex));
+    pthread_rwlock_unlock(&(priv->rwlock));
 
     gtk_widget_set_tooltip_text(GTK_WIDGET(weather), tooltip_text);
 
@@ -632,11 +635,21 @@ gtk_weather_get_property(GObject * object,
 
   switch (prop_id) {
   case PROP_LOCATION:
-    g_value_set_pointer(value, priv->location);
+    if (pthread_rwlock_rdlock(&(priv->rwlock)) == 0) {
+      g_value_set_pointer(value, priv->location);
+
+      pthread_rwlock_unlock(&(priv->rwlock));
+    }
+
     break;
 
   case PROP_FORECAST:
-    g_value_set_pointer(value, priv->forecast);
+    if (pthread_rwlock_rdlock(&(priv->rwlock)) == 0) {
+      g_value_set_pointer(value, priv->forecast);
+
+      pthread_rwlock_unlock(&(priv->rwlock));
+    }
+
     break;
 
   default:
@@ -667,7 +680,7 @@ gtk_weather_set_location(GtkWeather * weather, gpointer location, gboolean backu
   location_print(location);
 #endif
 
-  if (pthread_mutex_lock(&(priv->datamutex)) == 0) {
+  if (pthread_rwlock_wrlock(&(priv->rwlock)) == 0) {
     if (backup) {
       /* Set previous location, to save it. */
       location_copy(&priv->previous_location, priv->location);
@@ -676,7 +689,7 @@ gtk_weather_set_location(GtkWeather * weather, gpointer location, gboolean backu
     if (location) {
       location_copy(&priv->location, location);
 
-      pthread_mutex_unlock(&(priv->datamutex));
+      pthread_rwlock_unlock(&(priv->rwlock));
 
       /* reset forecast */
       gtk_weather_set_forecast(weather, NULL);
@@ -687,7 +700,7 @@ gtk_weather_set_location(GtkWeather * weather, gpointer location, gboolean backu
 
       priv->location = NULL;
 
-      pthread_mutex_unlock(&(priv->datamutex));
+      pthread_rwlock_unlock(&(priv->rwlock));
       
       gtk_weather_render(weather);
     }
@@ -727,14 +740,14 @@ gtk_weather_set_forecast(GtkWeather * weather, gpointer forecast)
   forecast_print(forecast);
 #endif
 
-  if (pthread_mutex_lock(&(priv->datamutex)) == 0) {
+  if (pthread_rwlock_wrlock(&(priv->rwlock)) == 0) {
     if (!forecast) {
       forecast_free(priv->forecast);
 
       priv->forecast = NULL;
     }
     
-    pthread_mutex_unlock(&(priv->datamutex));
+    pthread_rwlock_unlock(&(priv->rwlock));
   }
 
   gtk_weather_render(weather);
@@ -767,8 +780,6 @@ gtk_weather_button_pressed(GtkWidget * widget, GdkEventButton * event)
   /* If right-clicked, show popup */
   if (event->button == 3 && (event->type == GDK_BUTTON_PRESS)) {
     gtk_weather_run_popup_menu(widget);
-
-    return TRUE;
   } else if (event->button == 1 && (event->type == GDK_BUTTON_PRESS)) {
     gtk_weather_run_conditions_dialog(widget);
   }
@@ -788,19 +799,23 @@ gtk_weather_auto_update_toggled(GtkWidget * widget)
 
   GtkWeatherPrivate * priv = GTK_WEATHER_GET_PRIVATE(GTK_WEATHER(widget));
 
-  LocationInfo * location = (LocationInfo *) priv->location;
+  if (pthread_rwlock_rdlock(&(priv->rwlock)) == 0) {
+    LocationInfo * location = (LocationInfo *) priv->location;
 
-  if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(priv->preferences_data.auto_button)) &&
-      priv->location) {
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(priv->preferences_data.manual_button),
-                                 FALSE);
+    if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(priv->preferences_data.auto_button)) &&
+        priv->location) {
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(priv->preferences_data.manual_button),
+                                   FALSE);
 
-    gtk_widget_set_sensitive(GTK_WIDGET(priv->preferences_data.auto_spin_button), TRUE);
+      gtk_widget_set_sensitive(GTK_WIDGET(priv->preferences_data.auto_spin_button), TRUE);
 
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(priv->preferences_data.auto_spin_button), 
-                              (gdouble)location->interval_);
-  } else {
-    gtk_widget_set_sensitive(GTK_WIDGET(priv->preferences_data.auto_spin_button), FALSE);
+      gtk_spin_button_set_value(GTK_SPIN_BUTTON(priv->preferences_data.auto_spin_button), 
+                                (gdouble)location->interval_);
+    } else {
+      gtk_widget_set_sensitive(GTK_WIDGET(priv->preferences_data.auto_spin_button), FALSE);
+    }
+
+    pthread_rwlock_unlock(&(priv->rwlock));
   }
   
 }
@@ -1135,38 +1150,53 @@ gtk_weather_preferences_dialog_response(GtkDialog *dialog, gint response, gpoint
   const gchar * aliasstr = NULL;
   switch(response) {
   case GTK_RESPONSE_ACCEPT:
-    if (priv->location) {
-      LocationInfo * location = (LocationInfo *)priv->location;
+    if (pthread_rwlock_wrlock(&(priv->rwlock)) == 0) {
+      if(priv->location) {
+        LocationInfo * location = (LocationInfo *)priv->location;
 
-      aliasstr = gtk_entry_get_text(GTK_ENTRY(priv->preferences_data.alias_entry));
+        aliasstr = gtk_entry_get_text(GTK_ENTRY(priv->preferences_data.alias_entry));
 
-      location_property_set(priv->location,
-                            "alias",
-                            aliasstr,
-                            (aliasstr)?strlen(aliasstr):0);
+        location_property_set(priv->location,
+                              "alias",
+                              aliasstr,
+                              (aliasstr)?strlen(aliasstr):0);
           
-      location->enabled_ = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(priv->preferences_data.auto_button));
+        location->enabled_ =
+          gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(priv->preferences_data.auto_button));
 
-      if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON((priv->preferences_data.c_button)))) {
-        location->units_ = 'c';
+        if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON((priv->preferences_data.c_button)))) {
+          location->units_ = 'c';
+        } else {
+          location->units_ = 'f';
+        }
+          
+        location->interval_ =
+          (guint)gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(priv->preferences_data.auto_spin_button));
+
+        /* Set this location as the valid one */
+        location_copy(&priv->previous_location, priv->location);
+
+        pthread_rwlock_unlock(&(priv->rwlock));
+
+        /* get forecast */
+        gtk_weather_get_forecast(GTK_WIDGET(weather));
       } else {
-        location->units_ = 'f';
+        pthread_rwlock_unlock(&(priv->rwlock));
       }
-          
-      location->interval_ = (guint)gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(priv->preferences_data.auto_spin_button));
-
-      /* Set this location as the valid one */
-      location_copy(&priv->previous_location, priv->location);
-      
-      /* get forecast */
-      gtk_weather_get_forecast(GTK_WIDGET(weather));
     }
 
     break;
 
   case GTK_RESPONSE_REJECT:
-    if (priv->previous_location) {
-      gtk_weather_set_location(weather, priv->previous_location, FALSE);
+    if (pthread_rwlock_rdlock(&(priv->rwlock)) == 0) {
+      if (priv->previous_location) {
+        pthread_rwlock_unlock(&(priv->rwlock));
+
+        /* write lock is used inside */
+        gtk_weather_set_location(weather, priv->previous_location, FALSE);
+      } else {
+        pthread_rwlock_unlock(&(priv->rwlock));
+      }
     }
       
     gtk_weather_get_forecast(GTK_WIDGET(weather));
@@ -1182,8 +1212,7 @@ gtk_weather_preferences_dialog_response(GtkDialog *dialog, gint response, gpoint
   }
 
   priv->preferences_data.dialog = NULL;
-  
-  priv->preferences_data.shown = FALSE;
+  priv->preferences_data.shown  = FALSE;
 }
 
 /**
@@ -1199,8 +1228,16 @@ gtk_weather_run_popup_menu(GtkWidget * widget)
   LXW_LOG(LXW_DEBUG, "GtkWeather::popup_menu()");
   gtk_widget_show(GTK_WIDGET(priv->menu_data.quit_item));
 
+  LocationInfo * location = NULL;
+
+  if (pthread_rwlock_rdlock(&(priv->rwlock)) == 0) {
+    location = (LocationInfo *) priv->location;
+
+    pthread_rwlock_unlock(&(priv->rwlock));
+  }
+
   /* grey-out refresh, if no location is set */
-  if (!priv->location) {
+  if (!location) {
     gtk_widget_set_sensitive(priv->menu_data.refresh_item, FALSE);
   } else {
     gtk_widget_set_sensitive(priv->menu_data.refresh_item, TRUE);
@@ -1469,70 +1506,74 @@ gtk_weather_update_preferences_dialog(GtkWeather * weather)
     return;
   }
 
-  if (priv->location) {
-    LocationInfo * location = (LocationInfo *)priv->location;
+  if (pthread_rwlock_rdlock(&(priv->rwlock)) == 0) {
+    if (priv->location) {
+      LocationInfo * location = (LocationInfo *)priv->location;
 
-    /* populate location_label */
-    gchar * loc = g_strconcat((location->city_)?location->city_:"",
-                              (location->city_)?", ":"",
-                              (location->state_)?location->state_:"",
-                              (location->state_)?", ":"",
-                              (location->country_)?location->country_:"",
-                              NULL);
+      /* populate location_label */
+      gchar * loc = g_strconcat((location->city_)?location->city_:"",
+                                (location->city_)?", ":"",
+                                (location->state_)?location->state_:"",
+                                (location->state_)?", ":"",
+                                (location->country_)?location->country_:"",
+                                NULL);
 
-    gtk_label_set_text(GTK_LABEL(priv->preferences_data.location_label), loc);
+      gtk_label_set_text(GTK_LABEL(priv->preferences_data.location_label), loc);
 
-    gtk_button_set_label(GTK_BUTTON(priv->preferences_data.location_button), _("C_hange"));
+      gtk_button_set_label(GTK_BUTTON(priv->preferences_data.location_button), _("C_hange"));
 
-    /* populate the alias entry with alias_ */
-    gtk_widget_set_sensitive(priv->preferences_data.alias_entry, TRUE);
-    gtk_entry_set_text(GTK_ENTRY(priv->preferences_data.alias_entry), location->alias_);
+      /* populate the alias entry with alias_ */
+      gtk_widget_set_sensitive(priv->preferences_data.alias_entry, TRUE);
+      gtk_entry_set_text(GTK_ENTRY(priv->preferences_data.alias_entry), location->alias_);
 
-    gtk_widget_set_sensitive(priv->preferences_data.c_button, TRUE);
-    gtk_widget_set_sensitive(priv->preferences_data.f_button, TRUE);
+      gtk_widget_set_sensitive(priv->preferences_data.c_button, TRUE);
+      gtk_widget_set_sensitive(priv->preferences_data.f_button, TRUE);
 
-    gtk_widget_set_sensitive(priv->preferences_data.manual_button, TRUE);
-    gtk_widget_set_sensitive(priv->preferences_data.auto_button, TRUE);
+      gtk_widget_set_sensitive(priv->preferences_data.manual_button, TRUE);
+      gtk_widget_set_sensitive(priv->preferences_data.auto_button, TRUE);
 
-    /* populate/activate proper c/f button */  
-    if (location->units_ == 'c') {
-      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(priv->preferences_data.c_button), TRUE);
-      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(priv->preferences_data.f_button), FALSE);
+      /* populate/activate proper c/f button */  
+      if (location->units_ == 'c') {
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(priv->preferences_data.c_button), TRUE);
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(priv->preferences_data.f_button), FALSE);
+      } else {
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(priv->preferences_data.c_button), FALSE);
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(priv->preferences_data.f_button), TRUE);
+      }
+
+      /* populate/activate auto/manual button with auto-spin, if configured */
+      if (location->enabled_) {
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(priv->preferences_data.auto_button), TRUE);
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(priv->preferences_data.manual_button), FALSE);
+        gtk_widget_set_sensitive(GTK_WIDGET(priv->preferences_data.auto_spin_button), TRUE);
+        gtk_spin_button_set_value(GTK_SPIN_BUTTON(priv->preferences_data.auto_spin_button), 
+                                  (gdouble)location->interval_);
+      } else {
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(priv->preferences_data.auto_button), FALSE);
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(priv->preferences_data.manual_button), TRUE);
+        gtk_widget_set_sensitive(GTK_WIDGET(priv->preferences_data.auto_spin_button), FALSE);
+      }
+
+      g_free(loc);
     } else {
-      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(priv->preferences_data.c_button), FALSE);
-      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(priv->preferences_data.f_button), TRUE);
-    }
+      gtk_button_set_label(GTK_BUTTON(priv->preferences_data.location_button), _("_Set"));
 
-    /* populate/activate auto/manual button with auto-spin, if configured */
-    if (location->enabled_) {
-      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(priv->preferences_data.auto_button), TRUE);
-      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(priv->preferences_data.manual_button), FALSE);
-      gtk_widget_set_sensitive(GTK_WIDGET(priv->preferences_data.auto_spin_button), TRUE);
-      gtk_spin_button_set_value(GTK_SPIN_BUTTON(priv->preferences_data.auto_spin_button), 
-                                (gdouble)location->interval_);
-    } else {
-      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(priv->preferences_data.auto_button), FALSE);
-      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(priv->preferences_data.manual_button), TRUE);
+      gtk_label_set_text(GTK_LABEL(priv->preferences_data.location_label),
+                         _("None configured"));
+
+      gtk_entry_set_text(GTK_ENTRY(priv->preferences_data.alias_entry), "");
+      
+      gtk_widget_set_sensitive(priv->preferences_data.alias_entry, FALSE);
+
+      gtk_widget_set_sensitive(priv->preferences_data.c_button, FALSE);
+      gtk_widget_set_sensitive(priv->preferences_data.f_button, FALSE);
+
+      gtk_widget_set_sensitive(priv->preferences_data.auto_button, FALSE);
+      gtk_widget_set_sensitive(priv->preferences_data.manual_button, FALSE);
       gtk_widget_set_sensitive(GTK_WIDGET(priv->preferences_data.auto_spin_button), FALSE);
     }
 
-    g_free(loc);
-  } else {
-    gtk_button_set_label(GTK_BUTTON(priv->preferences_data.location_button), _("_Set"));
-
-    gtk_label_set_text(GTK_LABEL(priv->preferences_data.location_label),
-                       _("None configured"));
-
-    gtk_entry_set_text(GTK_ENTRY(priv->preferences_data.alias_entry), "");
-      
-    gtk_widget_set_sensitive(priv->preferences_data.alias_entry, FALSE);
-
-    gtk_widget_set_sensitive(priv->preferences_data.c_button, FALSE);
-    gtk_widget_set_sensitive(priv->preferences_data.f_button, FALSE);
-
-    gtk_widget_set_sensitive(priv->preferences_data.auto_button, FALSE);
-    gtk_widget_set_sensitive(priv->preferences_data.manual_button, FALSE);
-    gtk_widget_set_sensitive(GTK_WIDGET(priv->preferences_data.auto_spin_button), FALSE);
+    pthread_rwlock_unlock(&(priv->rwlock));
   }
 
 }
@@ -1558,7 +1599,13 @@ gtk_weather_create_conditions_dialog(GtkWeather * weather)
     return;
   }
 
-  LocationInfo * location = (LocationInfo *)priv->location;
+  LocationInfo * location = NULL;
+
+  if (pthread_rwlock_rdlock(&(priv->rwlock)) == 0) {
+    location = (LocationInfo *)priv->location;
+
+    pthread_rwlock_unlock(&(priv->rwlock));
+  }
 
   gchar * dialog_title = g_strdup_printf(_("Current Conditions for %s"), 
                                          (location)?location->alias_:"");
@@ -1858,7 +1905,7 @@ gtk_weather_update_conditions_dialog(GtkWeather * weather)
   ForecastInfo * forecast = (ForecastInfo *)priv->forecast;
 
   if (location && forecast && data->dialog) {
-    if (pthread_mutex_lock(&(priv->datamutex)) == 0) {
+    if (pthread_rwlock_rdlock(&(priv->rwlock)) == 0) {
       gchar * location_label_text = g_strconcat((location->city_)?location->city_:"",
                                                 (location->city_)?", ":"",
                                                 (location->state_)?location->state_:"",
@@ -1915,19 +1962,6 @@ gtk_weather_update_conditions_dialog(GtkWeather * weather)
       gtk_label_set_markup(GTK_LABEL(data->conditions_text_label),
                            conditions_label_text);
 
-      /* Free everything */
-      g_free(conditions_label_text);
-      g_free(wind);
-      g_free(visibility);
-      g_free(pressure);
-      g_free(windchill);
-      g_free(humidity);
-      g_free(location_label_text);
-
-      data->shown = TRUE;
-
-      gtk_widget_show_all(data->dialog);
-
       /* Get dimensions to create proper icon... */
       GtkRequisition req;
 
@@ -1944,7 +1978,20 @@ gtk_weather_update_conditions_dialog(GtkWeather * weather)
 
       g_object_unref(icon_buf);
 
-      pthread_mutex_unlock(&(priv->datamutex));
+      pthread_rwlock_unlock(&(priv->rwlock));
+
+      /* Free everything */
+      g_free(conditions_label_text);
+      g_free(wind);
+      g_free(visibility);
+      g_free(pressure);
+      g_free(windchill);
+      g_free(humidity);
+      g_free(location_label_text);
+
+      data->shown = TRUE;
+
+      gtk_widget_show_all(data->dialog);
     }
 
   }
@@ -1969,8 +2016,18 @@ gtk_weather_run_conditions_dialog(GtkWidget * widget)
           ((data && data->shown)  ? "SHOWN":
            (data && !data->shown) ? "HIDDEN" : "NULL"));
 
-  LocationInfo * location = (LocationInfo *)priv->location;
-  ForecastInfo * forecast = (ForecastInfo *)priv->forecast;
+  LocationInfo * location = NULL;
+  ForecastInfo * forecast = NULL;
+  const gchar  * alias    = NULL;
+
+  if (pthread_rwlock_rdlock(&(priv->rwlock)) == 0) {
+    location = (LocationInfo *)priv->location;
+    forecast = (ForecastInfo *)priv->forecast;
+
+    alias = location->alias_; /* for the error message */
+
+    pthread_rwlock_unlock(&(priv->rwlock));
+  }
 
   if (location && forecast) {
     if (data->shown) {
@@ -2002,12 +2059,8 @@ gtk_weather_run_conditions_dialog(GtkWidget * widget)
   } else if (!forecast && location) {
     gchar * error_msg = NULL;
 
-    if (pthread_mutex_lock(&(priv->datamutex)) == 0) {
-      error_msg = g_strdup_printf(_("Forecast for %s unavailable."),
-                                  location->alias_);
-
-      pthread_mutex_unlock(&(priv->datamutex));
-    }
+    error_msg = g_strdup_printf(_("Forecast for %s unavailable."),
+                                (alias) ? alias : _("N/A"));
 
     gtk_weather_run_error_dialog(NULL, (error_msg) ? error_msg : "FAIL!");
 
@@ -2320,53 +2373,60 @@ gtk_weather_get_tooltip_text(GtkWidget * widget)
 
   gchar * tooltip_text = NULL;
 
-  if (priv->location && priv->forecast) {
-    LocationInfo * location = priv->location;
-    ForecastInfo * forecast = priv->forecast;
+  LocationInfo * location = NULL;
+  ForecastInfo * forecast = NULL;
 
-    gchar * temperature = g_strdup_printf("%d \302\260%s\n", 
-                                          forecast->temperature_,
-                                          forecast->units_.temperature_);
+  if (pthread_rwlock_rdlock(&(priv->rwlock)) == 0) {
+    location = (LocationInfo *) priv->location;
+    forecast = (ForecastInfo *) priv->forecast;
 
-    gchar * days[FORECAST_MAX_DAYS] = { NULL };
+    if (location && forecast) {
+      gchar * temperature = g_strdup_printf("%d \302\260%s\n", 
+                                            forecast->temperature_,
+                                            forecast->units_.temperature_);
 
-    int d = 0;
-    for (; d < FORECAST_MAX_DAYS; d++) {
-      /* @TODO: can use the code_ member variable, too */
-      const gchar * actual_day =
-        (forecast->days_[d].day_) ? forecast->days_[d].day_ : "N/A";
+      gchar * days[FORECAST_MAX_DAYS] = { NULL };
+
+      int d = 0;
+      for (; d < FORECAST_MAX_DAYS; d++) {
+        /* @TODO: can use the code_ member variable, too */
+        const gchar * actual_day =
+          (forecast->days_[d].day_) ? forecast->days_[d].day_ : "N/A";
       
-      const gchar * conditions =
-        (forecast->days_[d].conditions_) ? forecast->days_[d].conditions_ : "N/A";
+        const gchar * conditions =
+          (forecast->days_[d].conditions_) ? forecast->days_[d].conditions_ : "N/A";
 
-      days[d] = g_strdup_printf("%s: %s %d\302\260 / %d\302\260",
-                                _(actual_day),
-                                _(conditions),
-                                forecast->days_[d].low_,
-                                forecast->days_[d].high_);
-    }
+        days[d] = g_strdup_printf("%s: %s %d\302\260 / %d\302\260",
+                                  _(actual_day),
+                                  _(conditions),
+                                  forecast->days_[d].low_,
+                                  forecast->days_[d].high_);
+      }
     
-    /* make it nice and pretty */
-    tooltip_text = g_strconcat(_("Currently in "),location->alias_, ": ",
-                               _(forecast->conditions_), " ", temperature, "",
-                               days[FORECAST_DAY_1], "\n",
-                               days[FORECAST_DAY_2], "\n",
-                               days[FORECAST_DAY_3], "\n",
-                               days[FORECAST_DAY_4], "\n",
-                               days[FORECAST_DAY_5],
-                               NULL);
+      /* make it nice and pretty */
+      tooltip_text = g_strconcat(_("Currently in "),location->alias_, ": ",
+                                 _(forecast->conditions_), " ", temperature, "",
+                                 days[FORECAST_DAY_1], "\n",
+                                 days[FORECAST_DAY_2], "\n",
+                                 days[FORECAST_DAY_3], "\n",
+                                 days[FORECAST_DAY_4], "\n",
+                                 days[FORECAST_DAY_5],
+                                 NULL);
                                  
-    g_free(temperature);
-    g_free(days[FORECAST_DAY_1]);
-    g_free(days[FORECAST_DAY_2]);
-    g_free(days[FORECAST_DAY_3]);
-    g_free(days[FORECAST_DAY_4]);
-    g_free(days[FORECAST_DAY_5]);
-  } else if (priv->location) {
-    tooltip_text = g_strdup_printf(_("Forecast for %s unavailable."),
-                                   ((LocationInfo *)priv->location)->alias_);
-  } else {
-    tooltip_text = g_strdup_printf(_("Location not set."));
+      g_free(temperature);
+      g_free(days[FORECAST_DAY_1]);
+      g_free(days[FORECAST_DAY_2]);
+      g_free(days[FORECAST_DAY_3]);
+      g_free(days[FORECAST_DAY_4]);
+      g_free(days[FORECAST_DAY_5]);
+    } else if (location) {
+      tooltip_text = g_strdup_printf(_("Forecast for %s unavailable."),
+                                     location->alias_);
+    } else {
+      tooltip_text = g_strdup_printf(_("Location not set."));
+    }
+
+    pthread_rwlock_unlock(&(priv->rwlock));
   }
 
   LXW_LOG(LXW_DEBUG, "\tReturning: %s", tooltip_text);
@@ -2481,9 +2541,17 @@ gtk_weather_forecast_thread_stop(GtkWeather * weather)
 {
   GtkWeatherPrivate * priv = GTK_WEATHER_GET_PRIVATE(weather);
 
-  // @TODO: take the location thread stuff out of here
+  /* location thread stuff is here as a protective measure */
   LocationThreadData * ltdata = &(priv->location_data);
   ForecastThreadData * ftdata = &(priv->forecast_data);
+
+  LocationInfo * location = NULL;
+
+  if (pthread_rwlock_rdlock(&(priv->rwlock)) == 0) {
+    location = (LocationInfo *) priv->location;
+
+    pthread_rwlock_unlock(&(priv->rwlock));
+  }
 
   int rc = 0;
   
@@ -2495,8 +2563,7 @@ gtk_weather_forecast_thread_stop(GtkWeather * weather)
     g_source_remove(ftdata->timerid);
   }
 
-  if (priv->location &&
-      ((LocationInfo *) priv->location)->enabled_) {
+  if (location && location->enabled_) {
     if (pthread_mutex_lock(&(priv->mutex)) == 0) {
       pthread_cond_signal(&(priv->cond));
       pthread_mutex_unlock(&(priv->mutex));
@@ -2528,33 +2595,44 @@ gtk_weather_get_forecast(GtkWidget * widget)
 
   GtkWeatherPrivate * priv = GTK_WEATHER_GET_PRIVATE(GTK_WEATHER(widget));
 
-  LocationInfo * location = (LocationInfo *)priv->location;
+  gboolean getit = FALSE;
 
-  if (location && location->enabled_) {      
-    /* resetting the timer as the interval may have changed */
-    guint interval_in_seconds = 60 * ((location->interval_) ?
-                                      location->interval_ : 1);
+  if (pthread_rwlock_rdlock(&(priv->rwlock)) == 0) {
+    LocationInfo * location = (LocationInfo *) priv->location;
 
-    if (priv->forecast_data.timerid > 0) {
+    if (location && location->enabled_) {      
+      /* resetting the timer as the interval may have changed */
+      guint interval_in_seconds = 60 * ((location->interval_) ?
+                                        location->interval_ : 1);
+
+      if (priv->forecast_data.timerid > 0) {
+        g_source_remove(priv->forecast_data.timerid);
+      }
+
+      priv->forecast_data.timerid =
+        g_timeout_add_seconds(interval_in_seconds,
+                              gtk_weather_get_forecast_timerfunc,
+                              (gpointer)widget);
+    } else if (priv->forecast_data.timerid > 0) {
       g_source_remove(priv->forecast_data.timerid);
+
+      priv->forecast_data.timerid = 0;
     }
 
-    priv->forecast_data.timerid =
-      g_timeout_add_seconds(interval_in_seconds,
-                            gtk_weather_get_forecast_timerfunc,
-                            (gpointer)widget);
-  } else if (priv->forecast_data.timerid > 0) {
-    g_source_remove(priv->forecast_data.timerid);
+    if (location) {
+      getit = TRUE;
+    }
 
-    priv->forecast_data.timerid = 0;
+    pthread_rwlock_unlock(&(priv->rwlock));
   }
+
   
   /* One, single call just to get the latest forecast.
    * Note that the only thing that the timer function does is
    * signal the condition variable so that the forecast thread
    * can retrieve the latest forecast.
    */
-  if (location) {
+  if (getit) {
     gtk_weather_get_forecast_timerfunc((gpointer)widget);
   }
 }
@@ -2571,17 +2649,27 @@ gtk_weather_get_forecast_timerfunc(gpointer data)
 {
   GtkWeatherPrivate * priv = GTK_WEATHER_GET_PRIVATE(GTK_WEATHER(data));
 
-  LocationInfo * location = (LocationInfo *) priv->location;
-  
-  LXW_LOG(LXW_DEBUG, "GtkWeather::get_forecast_timerfunc(%d %d)", 
-          (location) ? location->enabled_: 0,
-          (location) ? location->interval_ * 60 : 0);
-  
-  if (!location) {
-    LXW_LOG(LXW_ERROR,
-            "GtkWeather::get_forecast_timerfunc, location is NULL");
+  gboolean enabled = FALSE;
 
-    return FALSE;
+  if (pthread_rwlock_rdlock(&(priv->rwlock)) == 0) {
+    LocationInfo * location = (LocationInfo *) priv->location;
+  
+    LXW_LOG(LXW_DEBUG, "GtkWeather::get_forecast_timerfunc(%d %d)", 
+            (location) ? location->enabled_: 0,
+            (location) ? location->interval_ * 60 : 0);
+  
+    if (!location) {
+      LXW_LOG(LXW_ERROR,
+              "GtkWeather::get_forecast_timerfunc, location is NULL");
+
+      pthread_rwlock_unlock(&(priv->rwlock));
+
+      return FALSE;
+    }
+
+    enabled = location->enabled_;
+
+    pthread_rwlock_unlock(&(priv->rwlock));
   }
 
   LXW_LOG(LXW_DEBUG, "\t timerfunc about to signal cond.");
@@ -2591,7 +2679,9 @@ gtk_weather_get_forecast_timerfunc(gpointer data)
     pthread_mutex_unlock(&(priv->mutex));
   }
 
-  return location->enabled_;
+
+  
+  return enabled;
 }
 
 /**
@@ -2613,14 +2703,21 @@ gtk_weather_get_forecast_threadfunc(void * arg)
   
   GtkWeatherPrivate * priv = GTK_WEATHER_GET_PRIVATE(weather);
 
-  LocationInfo       * location = (LocationInfo *) priv->location;
+  LocationInfo       * location = NULL;
   ForecastThreadData * ftdata   = &(priv->forecast_data);
 
-  LXW_LOG(LXW_DEBUG, "GtkWeather::threadfunc active is %d", ftdata->active);
+  if (pthread_rwlock_rdlock(&(priv->rwlock)) == 0) {
+    location = (LocationInfo *) priv->location;
+
+    pthread_rwlock_unlock(&(priv->rwlock));
+  }
 
   /* Need to force the first refresh on thread start if location is set */
   gboolean initial = (location) ? TRUE : FALSE;
 
+  LXW_LOG(LXW_DEBUG, "GtkWeather::threadfunc active is %d, initial is %d",
+          ftdata->active, initial);
+  
   while (ftdata->active) {
     LXW_LOG(LXW_DEBUG, "\tabout to wait");
     if (!initial && pthread_mutex_lock(&(priv->mutex)) == 0) {
@@ -2638,7 +2735,7 @@ gtk_weather_get_forecast_threadfunc(void * arg)
 
     /* write lock */
     LXW_LOG(LXW_DEBUG, "\tabout to writelock");
-    if (pthread_mutex_lock(&(priv->datamutex)) == 0) {
+    if (pthread_rwlock_wrlock(&(priv->rwlock)) == 0) {
       location = (LocationInfo *) priv->location;
 
       LXW_LOG(LXW_DEBUG, "\tgetting forecast for %s", location->woeid_);
@@ -2647,7 +2744,7 @@ gtk_weather_get_forecast_threadfunc(void * arg)
                              location->units_, 
                              &(priv->forecast));
 
-      pthread_mutex_unlock(&(priv->datamutex));
+      pthread_rwlock_unlock(&(priv->rwlock));
 
       /* render on main thread */
       g_idle_add(gtk_weather_update_ui, weather);
