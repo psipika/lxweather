@@ -42,28 +42,27 @@ sighandler(int signal)
 {
   char * signame = NULL;
 
-  switch (signal)
-    {
-    case SIGINT:
-      signame = "SIGINT";
-      break;
+  switch (signal) {
+  case SIGINT:
+    signame = "SIGINT";
+    break;
 
-    case SIGKILL:
-      signame = "SIGKILL";
-      break;
+  case SIGKILL:
+    signame = "SIGKILL";
+    break;
 
-    case SIGTERM:
-      signame = "SIGTERM";
-      break;
+  case SIGTERM:
+    signame = "SIGTERM";
+    break;
 
-    case SIGHUP:
-      signame = "SIGHUP";
-      break;
+  case SIGHUP:
+    signame = "SIGHUP";
+    break;
 
-    default:
-      signame = "UNHANDLED";
-      break;
-    }
+  default:
+    signame = "UNHANDLED";
+    break;
+  }
 
   fprintf(stderr, "LXWeather: signal caught: %s [%d]\n",
           signame, signal);
@@ -74,11 +73,11 @@ sighandler(int signal)
 /* long options */
 static struct option longopts[] =
 {
-  {"help", 0, NULL, 1},
-  {"config", 1, NULL, 2},
-  {"logfile", 1, NULL, 3},
+  {"help",     0, NULL, 1},
+  {"config",   1, NULL, 2},
+  {"logfile",  1, NULL, 3},
   {"loglevel", 1, NULL, 4},
-  {NULL, 0, NULL, 0}
+  {NULL,       0, NULL, 0}
 };
 
 /* Wrapper around the weather widget/status icon pair */
@@ -90,8 +89,6 @@ typedef struct
 
 /* List with WeatherWidgetEntry entries */
 static GList * g_widgetentrylist = NULL;
-
-static gpointer entry_find(const GtkWeather * pWeather);
 
 /**
  * Prints out the usage help text.
@@ -123,12 +120,11 @@ usage(const char *progname)
  * @param data     Pointer to user data.
  */
 static void
-location_changed(GtkWeather * weather, gpointer location, gpointer data)
+location_changed(GtkWeather * weather  G_GNUC_UNUSED,
+                 gpointer     location G_GNUC_UNUSED,
+                 gpointer     data)
 {
-  /* To avoid compilation warning */
-  (void) weather;
-
-  WeatherWidgetEntry * entry = (WeatherWidgetEntry *)data; //entry_find(weather);
+  WeatherWidgetEntry * entry = (WeatherWidgetEntry *) data;
 
   LXW_LOG(LXW_DEBUG, "main::location_changed: %p, %p, %p, %p", 
           location, entry, (entry)?entry->widget_:NULL, data);
@@ -148,7 +144,7 @@ location_changed(GtkWeather * weather, gpointer location, gpointer data)
 static void
 forecast_changed(GtkWeather * weather, gpointer forecast, gpointer data)
 {
-  WeatherWidgetEntry * entry = (WeatherWidgetEntry *)data; //entry_find(weather);
+  WeatherWidgetEntry * entry = (WeatherWidgetEntry *) data;
 
   LXW_LOG(LXW_DEBUG, "main::forecast_changed: %p, %p, %p", 
           forecast, entry, (entry)?entry->widget_:NULL);
@@ -287,36 +283,6 @@ entry_free(gpointer entry)
       
     g_free(entry);
   }
-}
-
-/**
- * Finds the entry with the specified widget
- *
- * @param weather Pointer to the Weather widget to find in the list.
- *
- * @return the entry containing the specified widget pointer, or NULL
- *         if not found
- */
-static gpointer
-entry_find(const GtkWeather * weather)
-{
-  gpointer retval = NULL;
-
-  GList * iter = g_list_first(g_widgetentrylist);
-
-  while (iter) {
-    WeatherWidgetEntry * entry = (WeatherWidgetEntry *) iter->data;
-
-    if (entry && entry->widget_ == weather) {
-      retval = entry;
-
-      break;
-    }
-
-    iter = g_list_next(iter);
-  }
-
-  return retval;
 }
 
 /* -- main -- */

@@ -107,19 +107,6 @@ struct _ConditionsDialogData
   GtkWidget * conditions_image;
 };
 
-// @TODO: consider the use cases:
-// 1. updating location when forecast is being retrieved
-// 2. updating forecast when location is being changed (does this matter?)
-// 3.
-//   It looks like just a single mutex/cond pair would be sufficient.
-//   Only lock the mutex once the user selects the location to set --
-//   this way, once set, unlock the mutex and signal the condition variable.
-
-// @TODO: make sure the datamutex is locked on
-//     1) location set/copy
-//     2) forecast retrieval/removal
-//     3) save (?)
-
 struct _LocationThreadData
 {
   pthread_t        thread;
@@ -469,17 +456,17 @@ gtk_weather_size_allocate(GtkWidget * widget, GtkAllocation * allocation)
      this is done inside gtk_weather_render() function
    */
 
-  widget->allocation = *allocation;
+  gtk_widget_set_allocation(widget, allocation);
 
   gboolean weather_has_window = gtk_widget_get_has_window(widget);
 
-  if (GTK_WIDGET_REALIZED(widget) && weather_has_window) {
-    gdk_window_move_resize(widget->window, 
-                           allocation->x, 
-                           allocation->y, 
-                           allocation->width, 
-                           allocation->height);
-  }
+  if (gtk_widget_get_realized(widget) && weather_has_window) {
+      gdk_window_move_resize(gtk_widget_get_window(widget),
+                             allocation->x,
+                             allocation->y,
+                             allocation->width,
+                             allocation->height);
+    }
    
   GtkAllocation box_allocation;
 
@@ -545,8 +532,6 @@ gtk_weather_render(GtkWeather * weather)
                                             forecast->units_.temperature_);
 
       gtk_label_set_text(GTK_LABEL(priv->label), temperature);
-      
-      //gtk_widget_show_all(priv->hbox);
 
       g_free(temperature);
     } else {
@@ -829,12 +814,10 @@ gtk_weather_auto_update_toggled(GtkWidget * widget)
  * @return TRUE if the event should not be propagated further, FALSE otherwise.
  */
 static gboolean
-gtk_weather_change_location(GtkWidget * widget, GdkEventButton * event)
+gtk_weather_change_location(GtkWidget      * widget,
+                            GdkEventButton * event G_GNUC_UNUSED)
 {
   LXW_LOG(LXW_DEBUG, "GtkWeather::change_location");
-
-  /* disable compilation warning */
-  (void)event;
 
   GtkWeatherPrivate * priv = GTK_WEATHER_GET_PRIVATE(GTK_WEATHER(widget));
 
@@ -1137,10 +1120,10 @@ gtk_weather_create_popup_menu(GtkWeather * weather)
  * @param data     Pointer to user data (weather widget instance).
  */
 void
-gtk_weather_preferences_dialog_response(GtkDialog *dialog, gint response, gpointer data)
+gtk_weather_preferences_dialog_response(GtkDialog * dialog G_GNUC_UNUSED,
+                                        gint        response,
+                                        gpointer    data)
 {
-  (void) dialog; /* unused - to squash a warning */
-
   LXW_LOG(LXW_DEBUG, "GtkWeather::popup_menu(%d)", response);
 
   GtkWeather * weather = GTK_WEATHER(data);
@@ -2456,7 +2439,7 @@ gtk_weather_set_window_icon(GtkWindow * window, gchar * icon_id)
 {
   LXW_LOG(LXW_DEBUG, "GtkWeather::set_window_icon(%s)", icon_id);
 
-	if(gtk_icon_theme_has_icon(gtk_icon_theme_get_default(), icon_id)) {
+  if(gtk_icon_theme_has_icon(gtk_icon_theme_get_default(), icon_id)) {
     GdkPixbuf* window_icon = gtk_icon_theme_load_icon(gtk_icon_theme_get_default(), 
                                                       icon_id,
                                                       24, 

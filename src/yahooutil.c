@@ -281,10 +281,8 @@ int_if_different_set(gint * dst, const gchar * srcstr)
 {
   gint value = (gint)g_ascii_strtoll((srcstr)?srcstr:"0", NULL, 10);
 
-  // if diffrent, set
-  if (*dst != value) {
-    *dst = value;
-  }
+  /* set, regardless, the check is more expensive */
+  *dst = value;
 
   return 0;
 }
