@@ -26,8 +26,14 @@
 #include <stdio.h>
 #include <string.h>
 
+#define SAFE_STRNDUP(p, v)                       \
+  do {                                           \
+    if (!v) break;                               \
+    p = g_strndup((v), strlen(v));               \
+  } while (0);
+
 /**
- * Provides the mechanism to free any data associated with 
+ * Provides the mechanism to free all data associated with
  * the ForecastDay structure
  *
  * @param day Entry to free.
@@ -41,7 +47,25 @@ forecast_forecastday_free(ForecastDay * day)
 }
 
 /**
- * Provides the mechanism to free any data associated with 
+ * Provides the mechanism to copy all data associated with
+ * the ForecastDay structure
+ *
+ * @param dst Pointer to copy to.
+ * @param src Pointer to copy from.
+ */
+static void
+forecast_forecastday_copy(ForecastDay * dst, ForecastDay * src)
+{
+  SAFE_STRNDUP(dst->day_,        src->day_);
+  SAFE_STRNDUP(dst->conditions_, src->conditions_);
+
+  dst->high_ = src->high_;
+  dst->low_  = src->low_;
+  dst->code_ = src->code_;
+}
+
+/**
+ * Provides the mechanism to free all data associated with
  * the ForecastUnits structure
  *
  * @param units Entry to free.
@@ -57,7 +81,24 @@ forecast_units_free(ForecastUnits * units)
 }
 
 /**
- * Provides the mechanism to free any data associated with 
+ * Provides the mechanism to copy all data associated with
+ * the ForecastUnits structure
+ *
+ * @param dst Pointer to copy to.
+ * @param src Pointer to copy from.
+ *
+ */
+static void
+forecast_units_copy(ForecastUnits * dst, ForecastUnits * src )
+{
+  SAFE_STRNDUP(dst->distance_,    src->distance_);
+  SAFE_STRNDUP(dst->pressure_,    src->pressure_);
+  SAFE_STRNDUP(dst->speed_,       src->speed_);
+  SAFE_STRNDUP(dst->temperature_, src->temperature_);
+}
+
+/**
+ * Provides the mechanism to free any data associated with
  * the ForecastInfo structure
  *
  * @param forecast Entry to free.
@@ -91,6 +132,59 @@ forecast_free(gpointer forecast)
   }
 
   g_free(forecast);
+}
+
+/**
+ * Copies a forecast entry.
+ *
+ * @param dst Address of the pointer to the forecast to set.
+ * @param src Pointer to the forecast to use/copy.
+ *
+ * @note Destination is first freed, if non-NULL, otherwise a new allocation
+ *       is made. Both source and destination forecast ptrs must be released by
+ *       the caller.
+ */
+void
+forecast_copy(gpointer * dst, gpointer src)
+{
+  if (!src || !dst) {
+    return;
+  }
+
+  forecast_free(*dst);
+
+  *dst = g_try_new0(ForecastInfo, 1);
+
+  if (*dst) {
+    ForecastInfo * df = (ForecastInfo *) *dst;
+    ForecastInfo * sf = (ForecastInfo *)  src;
+
+    df->units_         = sf->units_;
+    df->pressureState_ = sf->pressureState_;
+
+    int i = 0;
+    for (; i < FORECAST_MAX_DAYS; i++) {
+      forecast_forecastday_copy(&(df->days_[i]), &(sf->days_[i]));
+    }
+
+    forecast_units_copy(&(df->units_), &(sf->units_));
+
+    df->windChill_   = sf->windChill_;
+    df->windSpeed_   = sf->windSpeed_;
+    df->humidity_    = sf->humidity_;
+    df->pressure_    = sf->pressure_;
+    df->visibility_  = sf->visibility_;
+    df->temperature_ = sf->temperature_;
+    SAFE_STRNDUP(df->windDirection_, sf->windDirection_);
+    SAFE_STRNDUP(df->sunrise_,       sf->sunrise_);
+    SAFE_STRNDUP(df->sunset_,        sf->sunset_);
+    SAFE_STRNDUP(df->time_,          sf->time_);
+    SAFE_STRNDUP(df->conditions_,    sf->conditions_);
+    SAFE_STRNDUP(df->imageURL_,      sf->imageURL_);
+
+    df->image_ = sf->image_;
+    g_object_ref(df->image_);
+  }
 }
 
 /**

@@ -109,6 +109,19 @@ void
 forecast_free(gpointer forecast);
 
 /**
+ * Copies a forecast entry.
+ *
+ * @param dst Address of the pointer to the forecast to set.
+ * @param src Pointer to the forecast to use/copy.
+ *
+ * @note Destination is first freed, if non-NULL, otherwise a new allocation
+ *       is made. Both source and destination forecast ptrs must be released by
+ *       the caller.
+ */
+void
+forecast_copy(gpointer * dst, gpointer src);
+
+/**
  * Prints the contents of the supplied entry to stdout
  *
  * @param forecast Entry contents of which to print.
