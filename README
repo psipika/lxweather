@@ -3,5 +3,53 @@ LXWeather - A lightweight GTK+ weather application.
 The application uses Yahoo! Weather(r) to retrieve weather forecast and
 conditions for specified location(s).
 
-The application also provides a plugin for the LXDE panel (LXPanel).
+LXWeather uses autotools to generate the executable program and relies on the
+following dependencies:
+ - glib-2.0-dev[el]
+ - gtk+-2.0-dev[el]
+ - libxml2-dev[el]
 
+To compile the application manually:
+ 1) clone this repository:
+    git clone git@github.com:psipika/lxweather.git
+
+ 2) Execute the following commands:
+    cd lxweather  # or whatever the cloned repository directory is
+    ./autogen.sh
+    ./configure   # /usr/local is the default prefix, FYI
+    make
+    sudo make install # depending on where the application is to be installed
+    
+Please report all bugs, comments or suggestions directly through the github
+issue tracker found at:
+   https://github.com/psipika/lxweather/issues
+
+
+The application GUI supports only one location at a time, but if there is a need
+to monitor multiple locations (up to 32), the user can edit LXWeather's
+configuration file (${HOME}/.config/lxweather/config), as follows:
+
+## begin snippet ##
+[Location 1]
+alias=Fiji
+country=Fiji
+woeid=23424813
+units=c
+interval=1
+enabled=true
+
+[Location 2]
+alias=Białystok
+city=Białystok
+state=podlaskie
+country=Poland
+woeid=486134
+units=c
+interval=1
+enabled=true
+## end snippet ##
+
+Make sure, however, that each location can be identified by a unique number
+(e.g.: Location 1, Location 2 . . . Location n).
+
+Have fun!
