@@ -58,4 +58,5 @@ EXTRA_DIST =         \
  NEWS                \
  README              \
  lxweather.spec.in   \
- lxweather.spec 
+ lxweather.spec      \
+ po/Makefile.in.in
