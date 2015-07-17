@@ -1,0 +1,9 @@
+Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: LXWeather
+Upstream-Contact: piotr.sipika@gmail.com
+Source: https://github.com/psipika/lxweather
+
+Files: *
+Copyright: Piotr Sipika <piotr.sipika@gmail.com>
+
+License: GPL-2+

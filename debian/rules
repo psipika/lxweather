@@ -1,0 +1,19 @@
+#!/usr/bin/make -f
+
+DEB_HOST_ARCH_OS ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_OS)
+DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+%:
+	dh ${@} --parallel --with autoreconf
+
+override_dh_autoreconf:
+	dh_autoreconf ./autogen.sh -- 
+
+override_dh_strip:
+	dh_strip --dbg-package=lxpweather-dbg
+
+override_dh_auto_install:
+	dh_auto_install
+	rm -f debian/tmp/usr/lib/$(DEB_HOST_MULTIARCH)/lxweather/*.la
