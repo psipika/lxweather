@@ -2,9 +2,8 @@ Source: lxweather
 Section: applications
 Priority: optional
 Maintainer: Piotr Sipika <piotr.sipika@gmail.com>
-Build-Depends:
- debhelper (>= 8.9.0~), dh-autoreconf, gtk-doc-tools,
- intltool, libgtk2.0-dev (>= 2.18), libxml2-dev
+Build-Depends: debhelper (>= 8.9.0~), dh-autoreconf,
+   intltool, libgtk2.0-dev (>= 2.18), libxml2-dev
 Standards-Version: 3.9.5
 Homepage: https://github.com/psipika/lxweather
 
