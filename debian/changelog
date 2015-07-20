@@ -1,3 +1,10 @@
+lxweather (0.0.4-1) unstable; urgency=low
+
+  * Updating RPM/debian packaging files.
+  * Bumping Changelog version.
+
+ -- Piotr Sipika <piotr.sipika@gmail.com>  Sun, 19 Jul 2015 22:59:47 -0400
+
 lxweather (0.0.3-1) unstable; urgency=low
 
   * Adding Initial set of debian packaging files.

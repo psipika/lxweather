@@ -19,7 +19,7 @@ See the COPYRIGHT file for more information.
 ])
 
 # Initialize Autoconf and Automake
-AC_INIT([lxweather], 0.0.3, [Piotr.Sipika AT gmail DOT com])
+AC_INIT([lxweather], 0.0.4, [Piotr.Sipika AT gmail DOT com])
 AC_CONFIG_SRCDIR([src/main.c])
 AM_INIT_AUTOMAKE([1.9.6 -Wall])
 AC_CONFIG_MACRO_DIR([m4])
